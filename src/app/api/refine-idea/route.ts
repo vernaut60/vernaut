@@ -3,8 +3,14 @@ import OpenAI from 'openai'
 import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 
+const openaiApiKey = process.env.OPENAI_API_KEY
+
+if (!openaiApiKey) {
+  throw new Error('Missing environment variable: OPENAI_API_KEY')
+}
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: openaiApiKey,
 })
 
 // Input validation schema
@@ -97,7 +103,12 @@ Each field should be a clear, concise sentence.`
           audience: validatedResponse.audience,
           solution: validatedResponse.solution,
           monetization: validatedResponse.monetization,
-          user_id: null, // TODO: Add user authentication
+          user_id: null, // TODO: Implement user authentication
+          // Strategy: Use Supabase Auth with JWT tokens
+          // 1. Extract user from request headers: const { data: { user } } = await supabase.auth.getUser(jwt)
+          // 2. Set user_id: user?.id || null (supports both authenticated and anonymous users)
+          // 3. Update RLS policies if needed for user-specific access
+          // Timeline: Phase 2 - after MVP validation
         })
         .select()
         .single()
