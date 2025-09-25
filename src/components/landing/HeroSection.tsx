@@ -44,7 +44,7 @@ export default function HeroSection() {
       } else {
         setError(data.error || 'Something went wrong')
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
@@ -102,7 +102,7 @@ export default function HeroSection() {
                   
                   {/* Title - Top center */}
                   <h2 className="text-3xl font-bold text-white animate-in fade-in duration-700 text-center">
-                    Let's Break Down Your Idea
+                    Let&apos;s Break Down Your Idea
                   </h2>
                 </div>
 
