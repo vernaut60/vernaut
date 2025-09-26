@@ -66,15 +66,16 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: 'You are a business analyst that breaks down ideas into structured components. Always respond with valid JSON only.'
+            content: `You are a senior business consultant specializing in startups.
+Always return JSON with exactly these 4 fields:
+{ "problem": "...", "audience": "...", "solution": "...", "monetization": "..." }
+- Ensure ideas are legal, ethical, and socially responsible.
+- If idea is vague, rewrite it into a clearer form before analysis.
+- Keep responses concise but meaningful (2–3 sentences per field).`
           },
           {
             role: 'user',
-            content: `Analyze this business idea and break it down into a JSON object with exactly these 4 fields: problem, audience, solution, monetization.
-
-Business idea: ${idea}
-
-Each field should be a clear, concise sentence.`
+            content: `Analyze this idea: "${idea}"`
           }
         ],
         response_format: { type: 'json_object' },
