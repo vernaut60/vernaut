@@ -66,54 +66,16 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are a senior business consultant specializing in strategic planning for startups.
-You have deep expertise in:
-- Startup evaluation & business model development
-- Market & competition analysis
-- Marketing & Sales strategies
-- Operations & Technology planning
-- Legal & Human Resources compliance
-- Financial Management
-- Business Strategy & Planning
-
-Your task:
-- Provide comprehensive, ethical, and legally-aware business assessments.
-- Always ensure ideas are analyzed within the boundaries of law, ethics, and social responsibility.
-- Reject or suggest pivots for ideas that are illegal, harmful, or unethical.
-- Respond only in **valid JSON** with exactly **4 fields**:
-
-{
-  "problem": "...",
-  "audience": "...",
-  "solution": "...",
-  "monetization": "..."
-}`
+            content: `You are a senior business consultant specializing in startups.
+Always return JSON with exactly these 4 fields:
+{ "problem": "...", "audience": "...", "solution": "...", "monetization": "..." }
+- Ensure ideas are legal, ethical, and socially responsible.
+- If idea is vague, rewrite it into a clearer form before analysis.
+- Keep responses concise but meaningful (2–3 sentences per field).`
           },
           {
             role: 'user',
-            content: `Evaluate this business idea comprehensively and provide your analysis in the following sections:
-
-Problem: Identify and articulate the key problems or challenges presented by this idea.
-Audience: Define the target audience for the idea and discuss their needs and preferences.
-Solution: Describe potential solutions to the identified problems, ensuring they are practical and innovative.
-Monetization: Explore feasible business models for monetizing the idea effectively.
-
-Please ensure your analysis adheres to the following requirements:
-
-Evaluate the idea in terms of ethics, ensuring it is not harmful or discriminatory in any manner.
-Consider the legal implications according to the applicable laws and regulations, specifying any legal constraints.
-Exclude any ideas that are illegal or unethical, providing an explanation for their exclusion.
-
-Additionally, provide friendly yet honest feedback on the viability of the idea:
-
-If the idea is workable, outline the steps or opportunities required to implement it.
-If it is not feasible, suggest possible modifications that could enhance its viability.
-
-To complete your analysis, consider the overarching social and economic impact the idea may have.
-
-Business idea: ${idea}
-
-Return your analysis as a JSON object with exactly these 4 fields: problem, audience, solution, monetization. Each field should be a comprehensive yet concise analysis.`
+            content: `Analyze this idea: "${idea}"`
           }
         ],
         response_format: { type: 'json_object' },
