@@ -138,6 +138,25 @@ body {
   }
 }
 
+@keyframes expandDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 800px;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+    margin-top: 1.5rem;
+  }
+}
+
 /* Motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .shimmer::after { animation: none; }
@@ -145,4 +164,5 @@ body {
   .btn-sweep::after { transition: none; }
   .pulse-once { animation: none; }
   [class*="animate-[fadeIn"] { animation: none !important; }
+  [class*="animate-[expandDown"] { animation: none !important; }
 }
