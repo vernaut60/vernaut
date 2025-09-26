@@ -52,9 +52,8 @@ export default function HeroSection() {
   }
 
   return (
-    <section className="w-full min-h-screen bg-black text-white flex items-start sm:items-center justify-center py-16">
-      {/* TEST: This should appear if changes are working */}
-      <div className="mx-auto w-full max-w-6xl px-4">
+    <section className="w-full min-h-screen bg-black text-white flex items-start sm:items-center justify-center py-16 pt-24">
+      <div className="mx-auto w-full max-w-4xl px-4">
         <div className="text-center">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight">
             Turn your startup idea into a clear roadmap in minutes.
