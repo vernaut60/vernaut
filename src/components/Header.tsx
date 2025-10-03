@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import LoginModal from './auth/login'
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-800">
@@ -20,16 +22,10 @@ export default function Header() {
           <div className="hidden sm:flex items-center space-x-4">
             <button
               type="button"
+              onClick={() => setIsLoginModalOpen(true)}
               className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
             >
               Log In
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center rounded-lg text-white font-semibold px-4 py-2 text-sm shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 hover:scale-105 transition-transform duration-150"
-              style={{ backgroundColor: '#667eea' }}
-            >
-              Sign Up
             </button>
           </div>
 
@@ -61,21 +57,24 @@ export default function Header() {
             <div className="flex flex-col space-y-3">
               <button
                 type="button"
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  setIsLoginModalOpen(true)
+                }}
                 className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
               >
                 Log In
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-lg text-white font-semibold px-4 py-3 text-sm shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 hover:scale-105 transition-transform duration-150"
-                style={{ backgroundColor: '#667eea' }}
-              >
-                Sign Up
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
     </header>
   )
 }
