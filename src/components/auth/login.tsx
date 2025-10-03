@@ -71,7 +71,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             } else {
                 setError(data.error || 'Something went wrong')
             }
-        } catch (err) {
+        } catch {
             setError('Network error. Please try again.')
         } finally {
             setIsLoading(false)
@@ -114,7 +114,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             } else {
                 setError(data.error || 'Failed to send reset email')
             }
-        } catch (err) {
+        } catch {
             setError('Network error. Please try again.')
         } finally {
             setIsLoading(false)
@@ -136,16 +136,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 setShowSuccess(false)
                 setSuccessMessage('')
             }, 3000)
-        } catch (err) {
+        } catch {
             setError(`Failed to connect with ${provider}. Please try again.`)
         } finally {
             setIsLoading(false)
         }
     }
 
-    const handleEmailSignup = async () => {
-        await handleSubmit('signup')
-    }
+
 
     if (!isOpen && !showSuccess) return null
 
@@ -188,7 +186,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                             {showSocialOptions && (
                                 <div className="space-y-4">
                                     <div className="text-center">
-                                        <p className="text-gray-300 text-sm mb-4">Choose how you'd like to sign up:</p>
+                                        <p className="text-gray-300 text-sm mb-4">Choose how you&apos;d like to sign up:</p>
                                     </div>
 
                                     {/* Social Login Buttons */}
