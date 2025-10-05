@@ -27,11 +27,11 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   
-  const PLACEHOLDER_EXAMPLES = [
-    'An AI assistant that helps freelancers create contracts and track client payments automatically.',
-    'A platform for small e-commerce brands to analyze customer behavior and suggest product improvements.',
-    'A mobile app that connects local chefs with nearby customers for home-cooked meal delivery.',
-  ]
+const PLACEHOLDER_EXAMPLES = [
+  'An AI assistant that helps freelancers create contracts and track client payments automatically.',
+  'A platform for small e-commerce brands to analyze customer behavior and suggest product improvements.',
+  'A mobile app that connects local chefs with nearby customers for home-cooked meal delivery.',
+]
 
   // Refinement state
   const [refinedPreview, setRefinedPreview] = useState('')
@@ -49,11 +49,10 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   const [revealedCards, setRevealedCards] = useState<number[]>([])
   const [currentSubtext, setCurrentSubtext] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
-  const [analysisStartTime, setAnalysisStartTime] = useState<number | null>(null)
   const [analysisDuration, setAnalysisDuration] = useState<number | null>(null)
   
   // Competitor analysis state
-  const [competitorData, setCompetitorData] = useState<any>(null)
+  const [competitorData, setCompetitorData] = useState<{ analysisId: string; count: number; categories: string[]; blurred: boolean } | null>(null)
   const [competitorLoading, setCompetitorLoading] = useState(false)
   const [competitorError, setCompetitorError] = useState<string | null>(null)
 
@@ -133,7 +132,7 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
         previewTimer.current = null
       }
     }
-  }, [idea, refinedPreview])
+  }, [idea, refinedPreview, previewLoading])
 
   const handleRefineIdea = async () => {
     if (!idea.trim() || isResetting) {
@@ -151,7 +150,6 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
     
     // Start timing
     const startTime = Date.now()
-    setAnalysisStartTime(startTime)
 
     // Start competitor analysis in the background (do not await)
     fetchCompetitorAnalysis(ideaToAnalyze, startTime)
@@ -237,13 +235,6 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   // Rotating subtext effect
   useEffect(() => {
     if (breakdownLoading) {
-      const subtexts = [
-        "Identifying key problems...",
-        "Defining your target audience...",
-        "Shaping a solution...",
-        "Exploring monetization models..."
-      ]
-      
       // Sync subtext with card reveals
       const timeouts: number[] = []
       
@@ -272,7 +263,7 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
     }, 4000) // Change every 4 seconds for better readability
 
     return () => clearInterval(interval)
-  }, [idea])
+  }, [idea, PLACEHOLDER_EXAMPLES.length])
 
   const handlePaste = () => {
     // Optional: Add visual feedback for paste
@@ -296,7 +287,6 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
     setCurrentSubtext(0)
     setIsResetting(false)
     setAnalysisDuration(null)
-    setAnalysisStartTime(null)
     
     // Clear the idea state
     setIdea('')
@@ -641,17 +631,9 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
                     </p>
                   ) : competitorData ? (
                     <>
-                      {competitorData.minCount && competitorData.maxCount ? (
-                        <p className="text-sm text-neutral-400">
-                          Estimated {competitorData.minCount}
-                          –
-                          {competitorData.maxCount} competitors across these categories.
-                        </p>
-                      ) : (
-                        <p className="text-sm text-neutral-400">
-                          We found {competitorData.count} similar players in this space.
-                        </p>
-                      )}
+                      <p className="text-sm text-neutral-400">
+                        We found {competitorData.count} similar players in this space.
+                      </p>
                       {Array.isArray(competitorData.categories) && competitorData.categories.length > 0 && (
                         <div className="mt-2">
                           <p className="text-xs text-neutral-500 mb-1">Preliminary categories</p>
@@ -742,11 +724,6 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
                   <button className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg">
                     🔒 Unlock Competitor Insights
                   </button>
-                  {competitorData?.disclaimer && (
-                    <p className="text-xs text-neutral-600 mt-2">
-                      {competitorData.disclaimer}
-                    </p>
-                  )}
                 </div>
               </div>
             </>

@@ -3,17 +3,16 @@
 import { useEffect, useState } from 'react'
 import InteractiveDemo from './InteractiveDemo'
 
+const BENEFITS = [
+  'competitor insights',
+  'audience profiles', 
+  'roadmaps you can build on'
+]
+
 export default function HeroSection() {
   // Animated subheadline state
   const [currentBenefitIndex, setCurrentBenefitIndex] = useState(0)
-  const [isTyping, setIsTyping] = useState(false)
   const [displayedText, setDisplayedText] = useState('')
-
-  const BENEFITS = [
-    'competitor insights',
-    'audience profiles', 
-    'roadmaps you can build on'
-  ]
 
   const handleReset = () => {
     // This will be handled by InteractiveDemo

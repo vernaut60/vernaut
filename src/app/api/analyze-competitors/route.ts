@@ -28,7 +28,7 @@ const analysisSchema = z.object({
   competitors: z.array(competitorSchema).min(3).max(8, 'Must have 3-8 competitors'),
 })
 
-type Competitor = z.infer<typeof competitorSchema>
+// type Competitor = z.infer<typeof competitorSchema>
 type CompetitorAnalysis = z.infer<typeof analysisSchema>
 
 export async function POST(request: NextRequest) {
@@ -122,7 +122,7 @@ Return ONLY a valid JSON object with this exact structure:
     }
 
     // Parse the JSON response with safer extraction
-    let rawAnalysis: any
+    let rawAnalysis: Record<string, unknown>
     try {
       // Extract JSON from response (handles cases where AI adds extra text)
       const jsonMatch = responseText.match(/\{[\s\S]*\}/)
@@ -132,7 +132,7 @@ Return ONLY a valid JSON object with this exact structure:
       }
       
       rawAnalysis = JSON.parse(jsonMatch[0])
-    } catch (parseError) {
+    } catch {
       console.error('Failed to parse OpenAI response:', responseText)
       throw new Error('Invalid response format from AI')
     }
