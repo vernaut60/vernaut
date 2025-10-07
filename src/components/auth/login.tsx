@@ -1,10 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 
 interface LoginModalProps {
     isOpen: boolean
     onClose: () => void
+    mode?: 'unlock' | 'signin'
 }
 
 interface LoginResponse {
@@ -17,7 +20,8 @@ interface LoginResponse {
     }
 }
 
-export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
+export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginModalProps) {
+    const router = useRouter()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -25,6 +29,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     const [showSuccess, setShowSuccess] = useState(false)
     const [successMessage, setSuccessMessage] = useState('')
     const [showSocialOptions, setShowSocialOptions] = useState(false)
+    const [showEntryChoice, setShowEntryChoice] = useState(true)
 
     const resetForm = () => {
         setEmail('')
@@ -62,6 +67,8 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 setSuccessMessage(data.message || 'Login successful')
                 handleClose()
                 setShowSuccess(true)
+                // Temporary redirect to dashboard for testing login flow
+                router.push('/dashboard')
 
                 // Auto-hide success message after 3 seconds
                 setTimeout(() => {
@@ -172,16 +179,76 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
             {/* Login Modal */}
             {isOpen && (
-                <div className="fixed top-0 left-0 right-0 bottom-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-black rounded-2xl p-8 w-full max-w-md shadow-2xl relative mx-auto my-auto border border-gray-700">
-                        {/* Header */}
-                        <div className="text-center mb-6">
-                            <h2 className="text-2xl font-bold text-white mb-2">Welcome to Vernaut</h2>
-                            <p className="text-gray-300">Sign in to your account or create a new one</p>
-                        </div>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    className="fixed top-0 left-0 right-0 bottom-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                >
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        className="bg-neutral-900/90 backdrop-blur-lg rounded-2xl p-6 w-full max-w-sm shadow-2xl relative mx-auto my-auto border border-white/10 ring-1 ring-white/10"
+                    >
+                        {showEntryChoice ? (
+                            <div className="flex flex-col items-center text-center p-2 max-w-sm mx-auto">
+                                <div className="relative mb-2">
+                                    <h2 className="text-xl font-semibold mb-1">
+                                        {mode === 'signin' ? (
+                                            <span className="text-white">🔐 Sign in to Vernaut</span>
+                                        ) : (
+                                            <span className="bg-gradient-to-r from-emerald-300 via-cyan-300 to-purple-300 bg-clip-text text-transparent drop-shadow-[0_0_6px_rgba(59,130,246,0.25)]">🔐 Unlock Full Insights</span>
+                                        )}
+                                    </h2>
+                                    <div className="pointer-events-none absolute inset-x-6 -bottom-1 h-px bg-gradient-to-r from-emerald-400/50 via-cyan-400/40 to-purple-400/50"></div>
+                                </div>
+                                <p className="text-[12px] text-neutral-300/80 mb-3 animate-[fadeInUp_0.4s_ease-out_forwards]">
+                                    {mode === 'signin' ? 'Access your saved ideas, insights, and AI roadmap.' : 'Your idea’s next step starts here 🚀'}
+                                </p>
+                                <p className="text-gray-400 text-sm mb-4">
+                                    {mode === 'signin'
+                                        ? 'Sign in to continue where you left off and sync across devices.'
+                                        : 'Sign in to uncover real competitors, AI-mapped markets, and your personalized roadmap to success.'}
+                                </p>
 
-                        {/* Form */}
-                        <div className="space-y-4">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSocialLogin('google')}
+                                    disabled={isLoading}
+                                    className="w-full mb-1 inline-flex items-center justify-center gap-2 bg-white text-gray-900 font-semibold py-3 px-4 rounded-lg hover:bg-gray-100 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-gray-300"
+                                >
+                                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    </svg>
+                                    Continue with Google
+                                </button>
+
+                                <p className="text-[11px] text-gray-400 my-1">or use your email instead</p>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEntryChoice(false)}
+                                    disabled={isLoading}
+                                    className="w-full mb-2 bg-transparent text-white font-semibold py-3 px-4 rounded-lg hover:bg-white/10 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-gray-600"
+                                >
+                                    Continue with Email
+                                </button>
+
+                                <p className="text-xs text-gray-500 mt-3">
+                                    By continuing, you agree to our <a className="underline text-gray-300">Terms</a> and <a className="underline text-gray-300">Privacy Policy</a>.
+                                </p>
+                            </div>
+                        ) : (
+                        <div className="space-y-3">
+                            {/* Header */}
+                            <div className="text-center mb-1">
+                                <h2 className="text-2xl font-bold text-white mb-1">Welcome to Vernaut</h2>
+                                <p className="text-gray-300">Sign in to your account or create a new one</p>
+                            </div>
                             {/* Social Options - Show when user clicks Sign Up */}
                             {showSocialOptions && (
                                 <div className="space-y-4">
@@ -307,7 +374,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                                     )}
 
                                     {/* Action Buttons */}
-                                    <div className="space-y-3 pt-2">
+                                    <div className="space-y-2 pt-1">
                                         <button
                                             type="button"
                                             onClick={() => handleSubmit('login')}
@@ -335,7 +402,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                                     </div>
 
                                     {/* Forgot Password Link */}
-                                    <div className="text-center pt-2">
+                                    <div className="text-center pt-1">
                                         <button
                                             type="button"
                                             onClick={handleForgotPassword}
@@ -348,6 +415,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                                 </>
                             )}
                         </div>
+                        )}
 
                         {/* Close Button */}
                         <button
@@ -360,8 +428,19 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
-                    </div>
-                </div>
+                        {/* Close Button */}
+                        <button
+                            type="button"
+                            onClick={() => (isLoading ? null : (showEntryChoice ? handleClose() : setShowEntryChoice(true)))}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                            disabled={isLoading}
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </motion.div>
+                </motion.div>
             )}
         </>
     )

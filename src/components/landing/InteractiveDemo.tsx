@@ -55,6 +55,97 @@ const PLACEHOLDER_EXAMPLES = [
   const [competitorData, setCompetitorData] = useState<{ analysisId: string; count: number; categories: string[]; blurred: boolean } | null>(null)
   const [competitorLoading, setCompetitorLoading] = useState(false)
   const [competitorError, setCompetitorError] = useState<string | null>(null)
+  const [showVagueIdeaMessage, setShowVagueIdeaMessage] = useState(false)
+  const [isBreakdownVague, setIsBreakdownVague] = useState(false)
+  const [ideaScore, setIdeaScore] = useState<number | null>(null)
+  const [isCalculatingScore, setIsCalculatingScore] = useState(false)
+
+  // Simple static number display
+  const AnimatedNumber = ({ value }: { value: number }) => {
+    return <span>{value}</span>
+  }
+
+  // Function to compute idea strength score based on refinement output
+  const computeIdeaScore = (refinedData: IdeaBreakdown) => {
+    const fields = [
+      refinedData.problem,
+      refinedData.audience,
+      refinedData.solution,
+      refinedData.monetization
+    ];
+    const textLengths = fields.map(f => f.length);
+    const avgLength = textLengths.reduce((a, b) => a + b, 0) / fields.length;
+
+    const clarity = Math.min(1, avgLength / 180); // was 120 → now stricter
+    const completeness = fields.filter(f => f.trim().length > 60).length / 4; // require richer text
+    const balance = 1 - Math.min(1, Math.abs(textLengths[0] - textLengths[2]) / 300);
+
+    // Weighted baseline with stronger penalty for short or uneven text
+    const weights = { problem: 0.35, audience: 0.25, solution: 0.25, monetization: 0.15 };
+    const weightedSum = fields.reduce(
+      (acc, f, i) => acc + (f.length / 200) * Object.values(weights)[i],
+      0
+    );
+
+    // Raw score before smoothing
+    const rawScore = (clarity * 0.4 + completeness * 0.3 + balance * 0.2 + weightedSum * 0.1) * 100;
+
+    // Gaussian-like normalization — more realistic spread
+    const normalized = 45 + (rawScore - 50) * 0.8 + (Math.random() - 0.5) * 10;
+
+    return Math.round(Math.min(95, Math.max(30, normalized)));
+  }
+
+  // Function to detect vague breakdown results
+  const detectVagueBreakdown = (breakdown: IdeaBreakdown) => {
+    const vagueIndicators = [
+      // generic uncertainty
+      'unclear',
+      'vague',
+      'ambiguous',
+      'unspecific',
+      'not clear',
+      'needs clarification',
+      'not enough detail',
+      'too general',
+      'too broad',
+      'lack of context',
+      'not sufficient information',
+      'lacks clarity',
+      'lacks detail',
+      'too vague',
+
+      // AI disclaimers or apologies
+      'cannot assist',
+      'cannot analyze',
+      'not able to determine',
+      'unable to determine',
+      'insufficient data',
+      'sorry',
+      'as an ai',
+      'not possible',
+      'not enough info',
+
+      // placeholder-like content
+      'insert idea here',
+      'your idea',
+      'describe your idea',
+      'more context required',
+      'n/a',
+      'none provided',
+
+      // explicitly says the idea is invalid
+      'invalid idea',
+      'does not make sense',
+      'not a valid concept',
+      'needs more context',
+      'too short',
+      'too vague',
+    ]
+
+    const breakdownText = JSON.stringify(breakdown).toLowerCase()
+    return vagueIndicators.some((word) => breakdownText.includes(word))
+  }
 
   // Debounce refine-preview calls to /api/refine-text
   useEffect(() => {
@@ -151,9 +242,6 @@ const PLACEHOLDER_EXAMPLES = [
     // Start timing
     const startTime = Date.now()
 
-    // Start competitor analysis in the background (do not await)
-    fetchCompetitorAnalysis(ideaToAnalyze, startTime)
-
     try {
       // Await only the refine breakdown request so UI can render ASAP
       const breakdownResponse = await fetch('/api/refine-idea', {
@@ -168,10 +256,54 @@ const PLACEHOLDER_EXAMPLES = [
 
       if (data.success) {
         setBreakdownData(data.idea)
-        console.log(`Breakdown analysis completed`)
+        
+        // Check if breakdown results are vague
+        const isVague = detectVagueBreakdown(data.idea)
+        setIsBreakdownVague(isVague)
+        
+        // Calculate idea strength score with micro-loading
+        setIsCalculatingScore(true)
+        const score = computeIdeaScore(data.idea)
+        
+        // Show "AI thinking" for 1.5 seconds before revealing score
+        setTimeout(() => {
+          setIdeaScore(score)
+          setIsCalculatingScore(false)
+        }, 1500)
+        
+        console.log(`Breakdown analysis completed`, { isVague, score })
+        
+        // Start competitor analysis with refined data
+        if (!isVague) {
+          const competitorPayload = `${data.idea.solution}. Target audience: ${data.idea.audience}.`
+          fetchCompetitorAnalysis(competitorPayload, startTime)
+        }
+      } else {
+        // Handle API error (like vague input rejection)
+        console.log('Breakdown API error:', data.error)
+        setIsBreakdownVague(true)
+        setBreakdownData({
+          id: 'error',
+          idea_text: ideaToAnalyze,
+          problem: 'Idea too vague to analyze',
+          audience: 'Please provide more details',
+          solution: 'Try describing what it does or who it helps',
+          monetization: 'Add more context for analysis',
+          created_at: new Date().toISOString()
+        })
       }
-    } catch {
-      // Handle error silently or show user feedback
+    } catch (error) {
+      console.error('Breakdown analysis error:', error)
+      setIsBreakdownVague(true)
+      setBreakdownData({
+        id: 'error',
+        idea_text: ideaToAnalyze,
+        problem: 'Analysis failed',
+        audience: 'Please try again',
+        solution: 'Check your input and retry',
+        monetization: 'Ensure idea is clear and business-related',
+        created_at: new Date().toISOString()
+      })
     } finally {
       setBreakdownLoading(false)
     }
@@ -194,6 +326,14 @@ const PLACEHOLDER_EXAMPLES = [
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to analyze competitors')
       }
+      
+      // Handle skipCompetitors response
+      if (data.data.skipCompetitors) {
+        setCompetitorData(null)
+        setShowVagueIdeaMessage(true)
+        return
+      }
+      
       // Teaser-only payload: { analysisId, count, categories, blurred }
       setCompetitorData(data.data)
       
@@ -283,6 +423,10 @@ const PLACEHOLDER_EXAMPLES = [
     setIsRefinementCollapsing(false)
     lastRefinedIdea.current = ''
     setCompetitorError(null)
+    setShowVagueIdeaMessage(false)
+    setIsBreakdownVague(false)
+    setIdeaScore(null)
+    setIsCalculatingScore(false)
     setRevealedCards([])
     setCurrentSubtext(0)
     setIsResetting(false)
@@ -307,7 +451,7 @@ const PLACEHOLDER_EXAMPLES = [
   return (
     <div className="w-full">
       <AnimatePresence mode="wait">
-        {isExpanded && breakdownData && competitorData ? (
+        {isExpanded && breakdownData && !isBreakdownVague && (competitorData || showVagueIdeaMessage) ? (
           // Completion overlay
           <motion.div
             key="completion"
@@ -341,6 +485,35 @@ const PLACEHOLDER_EXAMPLES = [
               <button
                 onClick={handleReset}
                 className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 underline transition-all duration-300 hover:scale-105"
+              >
+                💡 Try a New Idea
+              </button>
+            </div>
+          </motion.div>
+        ) : isExpanded && breakdownData && isBreakdownVague ? (
+          // Vague breakdown message
+          <motion.div
+            key="vague-breakdown"
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="w-full resize-none rounded-2xl border border-amber-500/30 focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/40 outline-none p-6 text-base shadow-[0_0_40px_rgba(245,158,11,0.25)] bg-black/60 backdrop-blur-sm relative overflow-hidden min-h-[200px] flex items-center justify-center"
+            style={{ 
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.05) 50%, transparent 100%)'
+            }}
+          >
+            <div className="text-center relative z-10">
+              <div className="text-2xl mb-2">⚠️</div>
+              <p className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-300 font-semibold text-xl drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]">
+                Analysis Incomplete
+              </p>
+              <p className="text-neutral-300 text-sm mb-2">Your idea seems too broad or unclear for a proper analysis.</p>
+              <p className="text-neutral-400 text-xs mb-4">Try adding more details — what does it do or who is it for?</p>
+              
+              <button
+                onClick={handleReset}
+                className="mt-4 text-sm text-amber-400 hover:text-amber-300 underline transition-all duration-300 hover:scale-105"
               >
                 💡 Try a New Idea
               </button>
@@ -500,9 +673,9 @@ const PLACEHOLDER_EXAMPLES = [
 
       {/* Results section */}
       {(isExpanded || isCollapsing) && (
-        <div className={`mt-4 p-6 bg-neutral-800/30 border border-neutral-600/50 rounded-xl backdrop-blur-sm transition-all duration-300 ${
-          isCollapsing 
-            ? 'opacity-0 translate-y-2' 
+        <div className={`mt-4 mb-8 p-6 bg-neutral-800/30 border border-neutral-600/50 rounded-xl backdrop-blur-sm transition-all duration-300 w-full max-w-none ${
+          isCollapsing
+            ? 'opacity-0 translate-y-2'
             : 'animate-[expandDown_0.6s_ease-out_forwards] opacity-0'
         }`}>
           {breakdownLoading ? (
@@ -575,6 +748,68 @@ const PLACEHOLDER_EXAMPLES = [
             </div>
           ) : breakdownData ? (
             <div className="space-y-3">
+              {/* Idea Strength Meter */}
+              {(ideaScore || isCalculatingScore) && (
+                <div className="text-center mb-4 p-3 bg-gradient-to-r from-neutral-800/50 to-neutral-700/30 rounded-xl border border-neutral-600/30 relative z-0">
+                  {isCalculatingScore ? (
+                    // AI Thinking state
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-neutral-300">Assessing idea strength...</span>
+                      <span className="text-lg animate-pulse">💭</span>
+                    </div>
+                  ) : (
+                    // Score revealed state
+                    <>
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-neutral-300">💡 Idea Strength:</span>
+                        <span className={`text-lg font-bold animate-[fadeInUp_0.5s_ease-out_forwards] ${
+                          ideaScore! > 85 ? 'text-emerald-400' :
+                          ideaScore! > 70 ? 'text-green-400' :
+                          ideaScore! > 55 ? 'text-yellow-400' :
+                          ideaScore! > 40 ? 'text-orange-400' :
+                          'text-red-400'
+                        }`}>
+                          <AnimatedNumber value={ideaScore!} />%
+                        </span>
+                      </div>
+                      
+                      {/* Progress bar */}
+                      <div className="w-full bg-neutral-700/50 rounded-full h-2 mb-2 relative overflow-hidden z-0">
+                        <div 
+                          className={`h-2 rounded-full transition-[width] duration-1000 ease-out ${
+                            ideaScore! > 85 ? 'bg-gradient-to-r from-emerald-400 to-green-300' :
+                            ideaScore! > 70 ? 'bg-gradient-to-r from-green-500 to-emerald-400' :
+                            ideaScore! > 55 ? 'bg-gradient-to-r from-yellow-400 to-amber-400' :
+                            ideaScore! > 40 ? 'bg-gradient-to-r from-orange-400 to-red-400' :
+                            'bg-gradient-to-r from-red-500 to-pink-400'
+                          }`}
+                          style={{ width: `${ideaScore}%` }}
+                        ></div>
+                        
+                        {/* Shimmer trail */}
+                        <div 
+                          className="absolute top-0 left-0 h-2 w-8 bg-gradient-to-r from-transparent via-white/30 to-transparent rounded-full animate-[shimmerTrail_1.5s_ease-out_forwards] pointer-events-none z-10"
+                          style={{ 
+                            animationDelay: '1.2s' // Start after progress bar fills
+                          }}
+                        ></div>
+                      </div>
+                      
+                      <p className="text-xs text-neutral-400 animate-[fadeInUp_0.5s_ease-out_forwards]">
+                        {ideaScore! > 85 
+                          ? "🌟 Exceptional clarity and vision — this idea could stand out to investors."
+                          : ideaScore! > 70 
+                          ? "💼 Strong, well-rounded concept — solid foundation for an MVP or pitch deck."
+                          : ideaScore! > 55 
+                          ? "✍️ Good starting point — refine your problem and audience focus for sharper impact."
+                          : "🧠 The idea feels a bit unclear — expand on what it solves and who it's for."
+                        }
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              
               {/* Connector phrase - only show when results are loaded */}
               <div className="text-center mb-4">
                 <p className="text-sm text-neutral-400">
@@ -601,13 +836,13 @@ const PLACEHOLDER_EXAMPLES = [
               </div>
             </div>
           ) : null}
-          
-          {/* Competitor section - shows immediately when competitorLoading is true */}
-          {(competitorLoading || competitorData || competitorError) && (
+
+          {/* Competitor section INSIDE results container */}
+          {(competitorLoading || competitorData || competitorError || showVagueIdeaMessage) && (
             <>
               {/* Section divider */}
               <div className="mt-6 pt-4 border-t border-neutral-600/30"></div>
-              
+
               {/* Competitor Landscape Section */}
               <div className="mt-6">
                 <div className="text-center mb-4">
@@ -616,9 +851,7 @@ const PLACEHOLDER_EXAMPLES = [
                   </h3>
                   {competitorLoading ? (
                     <div className="space-y-2">
-                      <p className="text-sm text-neutral-400">
-                        Analyzing competitor landscape...
-                      </p>
+                      <p className="text-sm text-neutral-400">Analyzing competitor landscape...</p>
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                         <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
@@ -626,44 +859,37 @@ const PLACEHOLDER_EXAMPLES = [
                       </div>
                     </div>
                   ) : competitorError ? (
-                    <p className="text-sm text-red-400">
-                      Failed to analyze competitors. Showing sample data.
-                    </p>
+                    <p className="text-sm text-red-400">Failed to analyze competitors. Showing sample data.</p>
+                  ) : showVagueIdeaMessage ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-neutral-400 mb-2">💡 Try describing what your idea does or who it helps — then we&apos;ll find competitors for you.</p>
+                    </div>
                   ) : competitorData ? (
                     <>
-                      <p className="text-sm text-neutral-400">
-                        We found {competitorData.count} similar players in this space.
-                      </p>
+                      <p className="text-sm text-neutral-400">We found {competitorData.count} similar players in this space.</p>
                       {Array.isArray(competitorData.categories) && competitorData.categories.length > 0 && (
                         <div className="mt-2">
-                          <p className="text-xs text-neutral-500 mb-1">Preliminary categories</p>
+                          <p className="text-xs text-neutral-500 mb-1">AI mapped your concept across these industries 🚀</p>
                           <div className="flex flex-wrap justify-center gap-2">
                             {competitorData.categories.slice(0, 4).map((cat: string, i: number) => (
-                              <span
-                                key={i}
-                                className="px-2 py-1 rounded-full text-[10px] uppercase tracking-wide bg-neutral-800/60 border border-neutral-700 text-neutral-300"
-                              >
+                              <span key={i} className="px-2 py-1 rounded-full text-[10px] uppercase tracking-wide bg-neutral-800/60 border border-neutral-700 text-neutral-300">
                                 {cat.split(/\s+/).slice(0, 3).join(' ')}
                               </span>
                             ))}
                           </div>
+                          <p className="text-xs text-neutral-500 mt-2 italic">These categories help frame your idea&apos;s real-world potential.</p>
                         </div>
                       )}
-                      <p className="text-sm text-neutral-500">
-                        Create a free account to see detailed competitor insights.
-                      </p>
+                      <p className="text-sm text-neutral-500">Create a free account to see detailed competitor insights.</p>
                     </>
                   ) : (
-                    <p className="text-sm text-neutral-400">
-                      We found 3 similar players in this space.
-                    </p>
+                    <p className="text-sm text-neutral-400">We found 3 similar players in this space.</p>
                   )}
                 </div>
-                
+
                 {/* Competitor cards */}
-                <div className="grid gap-4 md:grid-cols-3 mb-6">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
                   {competitorLoading ? (
-                    // Loading state with enhanced animation
                     [1, 2, 3].map((i) => (
                       <div key={i} className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg">
                         <div className="space-y-2">
@@ -678,15 +904,12 @@ const PLACEHOLDER_EXAMPLES = [
                       </div>
                     ))
                   ) : competitorData ? (
-                    // Teaser payload: render blurred placeholders using count/categories
                     Array.from({ length: Math.min(3, Math.max(competitorData.count || 3, 3)) }).map((_, i: number) => (
                       <div key={i} className="relative">
                         <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
                           <div className="space-y-2">
                             <div className="h-4 bg-neutral-700 rounded"></div>
-                            <p className="text-xs text-neutral-400">
-                              {(competitorData.categories && competitorData.categories[i % (competitorData.categories.length || 1)]) || 'Category'}
-                            </p>
+                            <p className="text-xs text-neutral-400">{(competitorData.categories && competitorData.categories[i % (competitorData.categories.length || 1)]) || 'Category'}</p>
                             <div className="h-3 bg-neutral-700 rounded w-2/3"></div>
                             <div className="h-3 bg-neutral-700 rounded w-3/4"></div>
                           </div>
@@ -699,7 +922,6 @@ const PLACEHOLDER_EXAMPLES = [
                       </div>
                     ))
                   ) : (
-                    // Fallback static cards
                     [1, 2, 3].map((i) => (
                       <div key={i} className="relative">
                         <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
@@ -718,17 +940,30 @@ const PLACEHOLDER_EXAMPLES = [
                     ))
                   )}
                 </div>
-                
-                {/* Action buttons */}
-                <div className="text-center space-y-3">
-                  <button className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg">
-                    🔒 Unlock Competitor Insights
+
+                {/* Unlock button */}
+                <div className="text-center mt-10 pb-4">
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new Event('open-login-modal'))}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg"
+                  >
+                    🔓 See Full AI Insights
                   </button>
+                  <p className="text-sm text-neutral-400 mt-3 max-w-2xl mx-auto leading-relaxed">
+                    ✨ Unlock the full journey — discover real competitors, AI-identified opportunities, and get your personalized roadmap to turn this idea into reality.
+                  </p>
                 </div>
+
               </div>
             </>
           )}
         </div>
+      )}
+
+      {/* Extra spacing to prevent overlap with next section */}
+      {isExpanded && (competitorLoading || competitorData || competitorError) && (
+        <div className="h-12"></div>
       )}
     </div>
   )

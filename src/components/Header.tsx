@@ -1,11 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import LoginModal from './auth/login'
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [loginMode, setLoginMode] = useState<'unlock' | 'signin'>('signin')
+
+  // Listen for global event to open login from anywhere (e.g., Unlock Insights button)
+  useEffect(() => {
+    const handler = () => {
+      setLoginMode('unlock')
+      setIsLoginModalOpen(true)
+    }
+    window.addEventListener('open-login-modal', handler as EventListener)
+    return () => window.removeEventListener('open-login-modal', handler as EventListener)
+  }, [])
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-800">
@@ -22,7 +33,7 @@ export default function Header() {
           <div className="hidden sm:flex items-center space-x-4">
             <button
               type="button"
-              onClick={() => setIsLoginModalOpen(true)}
+              onClick={() => { setLoginMode('signin'); setIsLoginModalOpen(true) }}
               className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
             >
               Log In
@@ -59,6 +70,7 @@ export default function Header() {
                 type="button"
                 onClick={() => {
                   setIsMenuOpen(false)
+                  setLoginMode('signin')
                   setIsLoginModalOpen(true)
                 }}
                 className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
@@ -74,6 +86,7 @@ export default function Header() {
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
+        mode={loginMode}
       />
     </header>
   )
