@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 interface LoginModalProps {
     isOpen: boolean
@@ -133,16 +134,17 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
         setIsLoading(true)
 
         try {
-            // For now, we'll show a success message
-            // In a real implementation, you'd integrate with Supabase social auth
-            setSuccessMessage(`Redirecting to ${provider.charAt(0).toUpperCase() + provider.slice(1)}...`)
-            handleClose()
-            setShowSuccess(true)
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: provider,
+                options: {
+                    redirectTo: `${window.location.origin}/dashboard`
+                }
+            })
 
-            setTimeout(() => {
-                setShowSuccess(false)
-                setSuccessMessage('')
-            }, 3000)
+            if (error) {
+                setError(`Failed to connect with ${provider}. Please try again.`)
+            }
+            // If successful, user will be redirected automatically
         } catch {
             setError(`Failed to connect with ${provider}. Please try again.`)
         } finally {
