@@ -61,7 +61,7 @@ export default function HeroSection() {
 
 
   return (
-    <section className="relative w-full min-h-screen bg-black text-white flex items-center justify-center py-16 overflow-hidden">
+    <section className="relative w-full bg-black text-white py-16 pb-24 overflow-visible" style={{ minHeight: '100vh' }}>
       {/* Animated background elements */}
       <div className="absolute inset-0">
         {/* Gradient shimmer overlay */}
@@ -151,8 +151,8 @@ export default function HeroSection() {
         </div>
       </div>
       
-      <div className="relative z-10 mx-auto w-full max-w-4xl px-4">
-        <div className="text-center">
+      <div className="relative z-10 mx-auto w-full px-4 transition-all duration-300" style={{ maxWidth: 'min(90vw, 1200px)' }}>
+        <div className="text-center" style={{ paddingTop: '4vh', paddingBottom: '1vh' }}>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight">
             💡 Turn any idea into a clear business roadmap.
           </h1>

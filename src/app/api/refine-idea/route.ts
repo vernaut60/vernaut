@@ -59,7 +59,56 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { idea } = requestSchema.parse(body)
 
-    // Step 2: Call OpenAI with retry logic
+    // Step 1.5: Lightweight precheck for obviously insufficient inputs
+    if (idea.trim().split(' ').length < 2) {
+      return NextResponse.json({
+        success: false,
+        error: 'Please describe your idea in a bit more detail (a few words is enough).'
+      }, { status: 400 })
+    }
+
+    // Step 2: Validate whether the idea is business-relevant
+    const validationPrompt = `
+You are a strict validator that classifies if a text is a potential business idea.
+Output ONLY one of these labels:
+
+- "valid_idea" → clearly describes a product, service, app, or startup concept.
+- "vague" → too short, unclear, or not descriptive enough.
+- "non_business" → personal statement, random phrase, insult, or unrelated to business.
+
+Text: "${idea.trim()}"
+`
+
+    const validationResponse = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'system', content: validationPrompt }],
+      temperature: 0,
+      max_tokens: 5,
+    })
+
+    const verdict = validationResponse.choices[0]?.message?.content?.trim().toLowerCase()
+
+    if (verdict === 'vague') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '⚠️ Your idea seems too vague. Try describing what it does or who it helps.',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (verdict === 'non_business') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '💡 This doesn\'t look like a business idea. Try describing a product or service concept.',
+        },
+        { status: 400 }
+      )
+    }
+
+    // Step 3: Call OpenAI with retry logic
     const validatedResponse = await retryWithBackoff(async () => {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',

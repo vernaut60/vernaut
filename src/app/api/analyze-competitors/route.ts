@@ -58,6 +58,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Basic semantic input validation
+    const cleanedIdea = idea.trim()
+    const wordCount = cleanedIdea.split(/\s+/).length
+
+    if (cleanedIdea.length < 8 || wordCount < 3) {
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            blurred: false,
+            message: 'Idea too vague to analyze. Please describe it in more detail.',
+            skipCompetitors: true,
+          },
+        },
+        { status: 200 }
+      )
+    }
+
+    // Detect if this is refined data from breakdown analysis or raw user input
+    const isRefinedData = idea.includes('Target audience:')
+    
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { success: false, error: 'OpenAI API key not configured' },
@@ -68,6 +89,11 @@ export async function POST(request: NextRequest) {
     const prompt = `You are a business analyst specializing in competitive landscape analysis. 
 
 For this startup idea: "${idea.trim()}"
+
+${isRefinedData 
+  ? `This is a refined business concept with clear solution and target audience. Analyze the competitive landscape thoroughly and provide:`
+  : `This appears to be a raw user input. Be conservative in your analysis - if the idea is too vague or unclear, focus on general industry categories rather than specific competitors.`
+}
 
 Analyze the competitive landscape and provide:
 
@@ -161,6 +187,69 @@ Return ONLY a valid JSON object with this exact structure:
       }
       
       throw validationError
+    }
+
+    // Check for vague responses even if JSON structure is valid
+    const vagueIndicators = [
+      // generic uncertainty
+      'unclear',
+      'vague',
+      'ambiguous',
+      'unspecific',
+      'not clear',
+      'needs clarification',
+      'not enough detail',
+      'too general',
+      'too broad',
+      'lack of context',
+      'not sufficient information',
+
+      // AI disclaimers or apologies
+      'cannot assist',
+      'cannot analyze',
+      'not able to determine',
+      'unable to determine',
+      'insufficient data',
+      'sorry',
+      'as an ai',
+      'not possible',
+      'not enough info',
+
+      // placeholder-like content
+      'insert idea here',
+      'your idea',
+      'describe your idea',
+      'more context required',
+      'n/a',
+      'none provided',
+
+      // explicitly says the idea is invalid
+      'invalid idea',
+      'does not make sense',
+      'cannot find competitors',
+      'not a valid concept',
+      'needs more context',
+      'too short',
+      'too vague',
+    ]
+
+    const vagueText = JSON.stringify(analysis).toLowerCase()
+    const isVague = vagueIndicators.some((word) => vagueText.includes(word))
+
+    // Be more lenient with refined data - only check for obvious vagueness
+    const shouldSkipCompetitors = isRefinedData 
+      ? (isVague && cleanedIdea.split(/\s+/).length < 6) // More lenient for refined data
+      : (isVague || cleanedIdea.split(/\s+/).length < 4) // Stricter for raw input
+
+    if (shouldSkipCompetitors) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          blurred: false,
+          message: 'The idea seems too vague or incomplete for competitor analysis. Try describing what it does or who it\'s for.',
+          skipCompetitors: true,
+        },
+      })
     }
 
     // Teaser response only (do not return competitor details to unauthenticated clients)
