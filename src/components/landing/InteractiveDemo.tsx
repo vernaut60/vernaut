@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface IdeaBreakdown {
   id: string
@@ -88,7 +88,7 @@ const PLACEHOLDER_EXAMPLES = [
     );
 
     // Raw score before smoothing
-    let rawScore = (clarity * 0.4 + completeness * 0.3 + balance * 0.2 + weightedSum * 0.1) * 100;
+    const rawScore = (clarity * 0.4 + completeness * 0.3 + balance * 0.2 + weightedSum * 0.1) * 100;
 
     // Gaussian-like normalization — more realistic spread
     const normalized = 45 + (rawScore - 50) * 0.8 + (Math.random() - 0.5) * 10;
@@ -862,7 +862,7 @@ const PLACEHOLDER_EXAMPLES = [
                     <p className="text-sm text-red-400">Failed to analyze competitors. Showing sample data.</p>
                   ) : showVagueIdeaMessage ? (
                     <div className="text-center py-4">
-                      <p className="text-sm text-neutral-400 mb-2">💡 Try describing what your idea does or who it helps — then we'll find competitors for you.</p>
+                      <p className="text-sm text-neutral-400 mb-2">💡 Try describing what your idea does or who it helps — then we&apos;ll find competitors for you.</p>
                     </div>
                   ) : competitorData ? (
                     <>
@@ -877,7 +877,7 @@ const PLACEHOLDER_EXAMPLES = [
                               </span>
                             ))}
                           </div>
-                          <p className="text-xs text-neutral-500 mt-2 italic">These categories help frame your idea's real-world potential.</p>
+                          <p className="text-xs text-neutral-500 mt-2 italic">These categories help frame your idea&apos;s real-world potential.</p>
                         </div>
                       )}
                       <p className="text-sm text-neutral-500">Create a free account to see detailed competitor insights.</p>

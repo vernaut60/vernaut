@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 export default function DashboardPage() {
   return (
     <main className="min-h-screen w-full bg-black text-white">
@@ -22,7 +24,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-8">
-            <a href="/" className="text-sm text-blue-400 hover:text-blue-300 underline">← Back to Home</a>
+            <Link href="/" className="text-sm text-blue-400 hover:text-blue-300 underline">← Back to Home</Link>
           </div>
         </div>
       </div>
