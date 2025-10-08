@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import LoginModal from './auth/login'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Header() {
+  const { user, loading, signOut } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginMode, setLoginMode] = useState<'unlock' | 'signin'>('signin')
+  const [mounted, setMounted] = useState(false)
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Listen for global event to open login from anywhere (e.g., Unlock Insights button)
   useEffect(() => {
@@ -17,6 +25,11 @@ export default function Header() {
     window.addEventListener('open-login-modal', handler as EventListener)
     return () => window.removeEventListener('open-login-modal', handler as EventListener)
   }, [])
+
+  const handleLogout = async () => {
+    await signOut()
+    setIsMenuOpen(false)
+  }
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-800">
@@ -31,13 +44,37 @@ export default function Header() {
 
           {/* Desktop Navigation - Right */}
           <div className="hidden sm:flex items-center space-x-4">
-            <button
-              type="button"
-              onClick={() => { setLoginMode('signin'); setIsLoginModalOpen(true) }}
-              className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
-            >
-              Log In
-            </button>
+            {!mounted ? (
+              <div className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              </div>
+            ) : loading ? (
+              <div className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              </div>
+            ) : user ? (
+              <div className="flex items-center space-x-3">
+                <span className="text-white text-sm">
+                  {user.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Signing Out...' : 'Sign Out'}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setLoginMode('signin'); setIsLoginModalOpen(true) }}
+                className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
+              >
+                Log In
+              </button>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -66,17 +103,44 @@ export default function Header() {
         {isMenuOpen && (
           <div className="sm:hidden border-t border-neutral-800 py-4">
             <div className="flex flex-col space-y-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMenuOpen(false)
-                  setLoginMode('signin')
-                  setIsLoginModalOpen(true)
-                }}
-                className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
-              >
-                Log In
-              </button>
+              {!mounted ? (
+                <div className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                </div>
+              ) : loading ? (
+                <div className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                </div>
+              ) : user ? (
+                <>
+                  <div className="text-white text-sm px-4 py-2">
+                    {user.email}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false)
+                      handleLogout()
+                    }}
+                    disabled={loading}
+                    className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Signing Out...' : 'Sign Out'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    setLoginMode('signin')
+                    setIsLoginModalOpen(true)
+                  }}
+                  className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm border border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800 transition-all duration-150 active:scale-95"
+                >
+                  Log In
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -88,6 +152,7 @@ export default function Header() {
         onClose={() => setIsLoginModalOpen(false)}
         mode={loginMode}
       />
+
     </header>
   )
 }
