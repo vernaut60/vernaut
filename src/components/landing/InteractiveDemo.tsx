@@ -21,11 +21,35 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   // Idea state
   const [idea, setIdea] = useState('')
   
+  // Guest session management
+  const [guestSessionId, setGuestSessionId] = useState<string | null>(null)
+  
   // Animated placeholder state
   const [currentPlaceholderIndex, setCurrentPlaceholderIndex] = useState(0)
   const [isPlaceholderAnimating, setIsPlaceholderAnimating] = useState(false)
   
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  
+  // Initialize guest session on component mount
+  useEffect(() => {
+    const initializeGuestSession = () => {
+      // Check if we already have a guest session
+      let existingSessionId = localStorage.getItem('guest-session-id')
+      
+      if (!existingSessionId) {
+        // Generate new guest session ID
+        existingSessionId = 'guest-session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+        localStorage.setItem('guest-session-id', existingSessionId)
+        console.log('🆕 Created new guest session:', existingSessionId)
+      } else {
+        console.log('♻️ Using existing guest session:', existingSessionId)
+      }
+      
+      setGuestSessionId(existingSessionId)
+    }
+    
+    initializeGuestSession()
+  }, [])
   
 const PLACEHOLDER_EXAMPLES = [
   'An AI assistant that helps freelancers create contracts and track client payments automatically.',
@@ -248,6 +272,7 @@ const PLACEHOLDER_EXAMPLES = [
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-guest-session-id': guestSessionId || 'anonymous-' + Date.now(),
         },
         body: JSON.stringify({ idea: ideaToAnalyze }),
       })

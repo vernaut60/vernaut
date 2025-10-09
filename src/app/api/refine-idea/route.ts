@@ -55,9 +55,16 @@ async function retryWithBackoff<T>(
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== /api/refine-idea called ===')
+    
     // Step 1: Validate request
+    console.log('Step 1: Parsing request body...')
     const body = await request.json()
+    console.log('Request body:', body)
+    
+    console.log('Step 1.5: Validating input...')
     const { idea } = requestSchema.parse(body)
+    console.log('Validated idea:', idea)
 
     // Step 1.5: Lightweight precheck for obviously insufficient inputs
     if (idea.trim().split(' ').length < 2) {
@@ -68,6 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Validate whether the idea is business-relevant
+    console.log('Step 2: Validating business relevance...')
     const validationPrompt = `
 You are a strict validator that classifies if a text is a potential business idea.
 Output ONLY one of these labels:
@@ -109,6 +117,7 @@ Text: "${idea.trim()}"
     }
 
     // Step 3: Call OpenAI with retry logic
+    console.log('Step 3: Calling OpenAI API...')
     const validatedResponse = await retryWithBackoff(async () => {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -145,28 +154,32 @@ Always return JSON with exactly these 4 fields:
 
     // Step 4: Insert into Supabase with retry logic
     const record = await retryWithBackoff(async () => {
+      // Extract guest session ID from request headers
+      const guestSessionId = request.headers.get('x-guest-session-id') || 
+                            request.headers.get('x-session-id') || 
+                            'anonymous-' + Date.now()
+      
+      console.log('Attempting to insert into guest_ideas table with session:', guestSessionId)
+      
       const { data, error: dbError } = await supabase
-        .from('ideas')
+        .from('guest_ideas')
         .insert({
+          guest_session_id: guestSessionId,
           idea_text: idea,
           problem: validatedResponse.problem,
           audience: validatedResponse.audience,
           solution: validatedResponse.solution,
           monetization: validatedResponse.monetization,
-          user_id: null, // TODO: Implement user authentication
-          // Strategy: Use Supabase Auth with JWT tokens
-          // 1. Extract user from request headers: const { data: { user } } = await supabase.auth.getUser(jwt)
-          // 2. Set user_id: user?.id || null (supports both authenticated and anonymous users)
-          // 3. Update RLS policies if needed for user-specific access
-          // Timeline: Phase 2 - after MVP validation
         })
         .select()
         .single()
 
       if (dbError) {
+        console.error('Database error:', dbError)
         throw new Error(`Database error: ${dbError.message}`)
       }
 
+      console.log('Successfully inserted into guest_ideas:', data)
       return data
     })
 
