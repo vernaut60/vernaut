@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      guest_ideas: {
+        Row: {
+          audience: string
+          created_at: string | null
+          guest_session_id: string
+          id: string
+          idea_text: string
+          monetization: string
+          problem: string
+          solution: string
+        }
+        Insert: {
+          audience: string
+          created_at?: string | null
+          guest_session_id: string
+          id?: string
+          idea_text: string
+          monetization: string
+          problem: string
+          solution: string
+        }
+        Update: {
+          audience?: string
+          created_at?: string | null
+          guest_session_id?: string
+          id?: string
+          idea_text?: string
+          monetization?: string
+          problem?: string
+          solution?: string
+        }
+        Relationships: []
+      }
       ideas: {
         Row: {
           audience: string

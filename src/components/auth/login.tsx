@@ -163,10 +163,22 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session) {
-                // User successfully signed in via magic link
-                addToast?.('Welcome! You\'re now signed in.', 'success')
+                // Only show welcome toast for actual sign-in events, not session restoration
+                // We'll track this with a session storage flag to avoid showing on page refresh
+                const hasShownWelcome = sessionStorage.getItem('auth-welcome-shown')
+                
+                if (!hasShownWelcome) {
+                    addToast?.('Welcome! You\'re now signed in.', 'success')
+                    sessionStorage.setItem('auth-welcome-shown', 'true')
+                }
+                
                 handleClose()
                 router.push('/dashboard')
+            }
+            
+            // Clear the flag when user signs out
+            if (event === 'SIGNED_OUT') {
+                sessionStorage.removeItem('auth-welcome-shown')
             }
         })
 
@@ -199,7 +211,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
         
         // Clear general error when user starts typing
         if (error) {
-            setError(null)
+        setError(null)
         }
     }
 
@@ -258,7 +270,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
 
         try {
             const { error } = await supabase.auth.signInWithOtp({
-                email: email.trim(),
+                    email: email.trim(),
                 options: {
                     emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`
                 }
@@ -644,7 +656,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                                         : error 
                                                             ? 'border-red-500 bg-red-900/50' 
                                                             : 'border-gray-600'
-                                            }`}
+                                                }`}
                                             placeholder="Enter your email"
                                             disabled={isLoading}
                                         />
@@ -736,7 +748,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                             <div className="flex items-center space-x-2">
                                                 <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                                                 <p className="text-orange-300 text-sm">{networkError}</p>
-                                            </div>
+                                    </div>
                                             {retryCount > 0 && (
                                                 <p className="text-orange-400 text-xs mt-1">
                                                     Retry attempts: {retryCount}
@@ -789,7 +801,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                                     className="bg-indigo-500 h-2 rounded-full transition-all duration-1000 ease-linear"
                                                     style={{ width: `${(retryAttempts / maxRetries) * 100}%` }}
                                                 ></div>
-                                            </div>
+                                        </div>
                                             <p className="text-indigo-400 text-xs mt-1">
                                                 Using exponential backoff for better reliability
                                             </p>

@@ -75,6 +75,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Handle automatic guest idea handoff
+  const handleGuestIdeaHandoff = async (session: Session) => {
+    try {
+      // Check if we have a guest session ID in localStorage
+      const guestSessionId = localStorage.getItem('guest-session-id')
+      
+      if (!guestSessionId) {
+        console.log('🔄 No guest session found, skipping handoff')
+        return
+      }
+      
+      console.log('🔄 Attempting to transfer guest ideas for session:', guestSessionId)
+      
+      // Call the handoff API
+      const response = await fetch('/api/demo/handoff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ guest_session_id: guestSessionId }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log('✅ Successfully transferred guest ideas:', result.ideas_transferred)
+        // Clear the guest session ID after successful transfer
+        localStorage.removeItem('guest-session-id')
+      } else {
+        console.log('ℹ️ Handoff skipped:', result.message)
+        // Still clear the session ID to avoid repeated attempts
+        localStorage.removeItem('guest-session-id')
+      }
+    } catch (error) {
+      console.error('❌ Error during guest idea handoff:', error)
+      // Don't clear the session ID on error, allow retry
+    }
+  }
+
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
@@ -94,6 +134,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null)
         validateSession(session)
         setLoading(false)
+        
+        // Handle automatic guest idea handoff on sign-in
+        if (event === 'SIGNED_IN' && session?.user) {
+          await handleGuestIdeaHandoff(session)
+        }
       }
     )
 
