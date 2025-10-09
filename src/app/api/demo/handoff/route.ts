@@ -134,11 +134,12 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
   const { data: guestIdeas, error: fetchError } = guestIdeasResult
 
   if (fetchError) {
+    const errorMessage = (fetchError as { message?: string }).message || 'Unknown error'
     logError('Failed to fetch guest ideas after retries', { 
       guestSessionId, 
-      error: (fetchError as any).message 
+      error: errorMessage 
     })
-    throw new Error(`Failed to fetch guest ideas: ${(fetchError as any).message}`)
+    throw new Error(`Failed to fetch guest ideas: ${errorMessage}`)
   }
 
   if (!guestIdeas || guestIdeas.length === 0) {
@@ -162,11 +163,12 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
   const { data: existingIdeas, error: checkError } = existingIdeasResult
 
   if (checkError) {
+    const errorMessage = (checkError as { message?: string }).message || 'Unknown error'
     logError('Failed to check existing ideas after retries', { 
       userId, 
-      error: (checkError as any).message 
+      error: errorMessage 
     })
-    throw new Error(`Failed to check existing ideas: ${(checkError as any).message}`)
+    throw new Error(`Failed to check existing ideas: ${errorMessage}`)
   }
 
   if (existingIdeas && existingIdeas.length > 0) {
@@ -204,13 +206,15 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
   const { data: transferredIdea, error: insertError } = insertResult
 
   if (insertError) {
+    const errorMessage = (insertError as { message?: string }).message || 'Unknown error'
+    const errorCode = (insertError as { code?: string }).code || 'UNKNOWN'
     logError('Failed to transfer guest ideas after retries', { 
       userId, 
       guestSessionId,
-      error: (insertError as any).message,
-      code: (insertError as any).code
+      error: errorMessage,
+      code: errorCode
     })
-    throw new Error(`Failed to transfer ideas: ${(insertError as any).message}`)
+    throw new Error(`Failed to transfer ideas: ${errorMessage}`)
   }
 
   return { 
