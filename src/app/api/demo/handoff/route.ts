@@ -20,6 +20,10 @@ const responseSchema = z.object({
     audience: z.string(),
     solution: z.string(),
     monetization: z.string(),
+    ai_insights: z.any().optional(),
+    score: z.number().optional(),
+    risk_score: z.number().optional(),
+    risk_analysis: z.any().optional(),
     created_at: z.string()
   })).optional()
 })
@@ -179,14 +183,18 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
     }
   }
 
-  // Transfer the latest guest idea
+  // Transfer the latest guest idea with all fields
   const ideaToInsert = {
     user_id: userId,
     idea_text: guestIdeas[0].idea_text,
     problem: guestIdeas[0].problem,
     audience: guestIdeas[0].audience,
     solution: guestIdeas[0].solution,
-    monetization: guestIdeas[0].monetization
+    monetization: guestIdeas[0].monetization,
+    ai_insights: guestIdeas[0].ai_insights,
+    score: guestIdeas[0].score,
+    risk_score: guestIdeas[0].risk_score,
+    risk_analysis: guestIdeas[0].risk_analysis
   }
 
   const insertResult = await retryWithBackoff(async () => {

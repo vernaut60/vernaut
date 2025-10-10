@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { motion } from 'framer-motion'
 
@@ -10,7 +9,6 @@ interface DashboardPageProps {
 }
 
 export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
-  const [userEmail, setUserEmail] = useState<string>('')
   const [displayName, setDisplayName] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
 
@@ -42,7 +40,6 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
         const { data: { user } } = await supabase.auth.getUser()
         
         if (user?.email) {
-          setUserEmail(user.email)
           const name = getUserDisplayName(user.email)
           setDisplayName(name)
         } else {
@@ -333,7 +330,7 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
             transition={{ duration: 0.6, delay: 0.7 }}
             className="mt-4 text-center"
           >
-            <p className="text-xs text-neutral-400/70">Free during early access — feedback helps shape Vernaut 🚀</p>
+            <p className="text-xs text-neutral-400/70">✨ Early Access Preview · Feedback helps shape Vernaut 🚀</p>
           </motion.div>
         </div>
       </main>
