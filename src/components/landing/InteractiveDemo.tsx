@@ -861,128 +861,121 @@ const PLACEHOLDER_EXAMPLES = [
               </div>
             </div>
           ) : null}
+        </div>
+      )}
 
-          {/* Competitor section INSIDE results container */}
-          {(competitorLoading || competitorData || competitorError || showVagueIdeaMessage) && (
-            <>
-              {/* Section divider */}
-              <div className="mt-6 pt-4 border-t border-neutral-600/30"></div>
-
-              {/* Competitor Landscape Section */}
-              <div className="mt-6">
-                <div className="text-center mb-4">
-                  <h3 className="text-lg font-semibold text-neutral-300 mb-2">
-                    Competitor Landscape 🔒
-                  </h3>
-                  {competitorLoading ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-neutral-400">Analyzing competitor landscape...</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                      </div>
-                    </div>
-                  ) : competitorError ? (
-                    <p className="text-sm text-red-400">Failed to analyze competitors. Showing sample data.</p>
-                  ) : showVagueIdeaMessage ? (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-neutral-400 mb-2">💡 Try describing what your idea does or who it helps — then we&apos;ll find competitors for you.</p>
-                    </div>
-                  ) : competitorData ? (
-                    <>
-                      <p className="text-sm text-neutral-400">We found {competitorData.count} similar players in this space.</p>
-                      {Array.isArray(competitorData.categories) && competitorData.categories.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs text-neutral-500 mb-1">AI mapped your concept across these industries 🚀</p>
-                          <div className="flex flex-wrap justify-center gap-2">
-                            {competitorData.categories.slice(0, 4).map((cat: string, i: number) => (
-                              <span key={i} className="px-2 py-1 rounded-full text-[10px] uppercase tracking-wide bg-neutral-800/60 border border-neutral-700 text-neutral-300">
-                                {cat.split(/\s+/).slice(0, 3).join(' ')}
-                              </span>
-                            ))}
-                          </div>
-                          <p className="text-xs text-neutral-500 mt-2 italic">These categories help frame your idea&apos;s real-world potential.</p>
-                        </div>
-                      )}
-                      <p className="text-sm text-neutral-500">Create a free account to see detailed competitor insights.</p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-neutral-400">We found 3 similar players in this space.</p>
-                  )}
+      {/* Competitor Landscape Section - Now positioned outside results container for better mobile layout */}
+      {(competitorLoading || competitorData || competitorError || showVagueIdeaMessage) && (
+        <div className="mt-6 p-6 bg-neutral-800/30 border border-neutral-600/50 rounded-xl backdrop-blur-sm">
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-semibold text-neutral-300 mb-2">
+              Competitor Landscape 🔒
+            </h3>
+            {competitorLoading ? (
+              <div className="space-y-2">
+                <p className="text-sm text-neutral-400">Analyzing competitor landscape...</p>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
                 </div>
-
-                {/* Competitor cards */}
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
-                  {competitorLoading ? (
-                    [1, 2, 3].map((i) => (
-                      <div key={i} className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg">
-                        <div className="space-y-2">
-                          <div className="h-4 bg-neutral-700 rounded shimmer animate-pulse"></div>
-                          <div className="h-3 bg-neutral-700 rounded w-3/4 animate-pulse"></div>
-                          <div className="h-3 bg-neutral-700 rounded w-1/2 animate-pulse"></div>
-                          <div className="flex items-center gap-2 mt-2">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                            <div className="text-xs text-neutral-500">Analyzing...</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : competitorData ? (
-                    Array.from({ length: Math.min(3, Math.max(competitorData.count || 3, 3)) }).map((_, i: number) => (
-                      <div key={i} className="relative">
-                        <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
-                          <div className="space-y-2">
-                            <div className="h-4 bg-neutral-700 rounded"></div>
-                            <p className="text-xs text-neutral-400">{(competitorData.categories && competitorData.categories[i % (competitorData.categories.length || 1)]) || 'Category'}</p>
-                            <div className="h-3 bg-neutral-700 rounded w-2/3"></div>
-                            <div className="h-3 bg-neutral-700 rounded w-3/4"></div>
-                          </div>
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="bg-neutral-900/80 rounded-full p-2">
-                            <span className="text-2xl">🔒</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    [1, 2, 3].map((i) => (
-                      <div key={i} className="relative">
-                        <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
-                          <div className="space-y-2">
-                            <div className="h-4 bg-neutral-700 rounded"></div>
-                            <div className="h-3 bg-neutral-700 rounded w-3/4"></div>
-                            <div className="h-3 bg-neutral-700 rounded w-1/2"></div>
-                          </div>
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="bg-neutral-900/80 rounded-full p-2">
-                            <span className="text-2xl">🔒</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Unlock button */}
-                <div className="text-center mt-10 pb-4">
-                  <button
-                    type="button"
-                    onClick={() => window.dispatchEvent(new Event('open-login-modal'))}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg"
-                  >
-                    🔓 See Full AI Insights
-                  </button>
-                  <p className="text-sm text-neutral-400 mt-3 max-w-2xl mx-auto leading-relaxed">
-                    ✨ Unlock the full journey — discover real competitors, AI-identified opportunities, and get your personalized roadmap to turn this idea into reality.
-                  </p>
-                </div>
-
               </div>
-            </>
-          )}
+            ) : competitorError ? (
+              <p className="text-sm text-red-400">Failed to analyze competitors. Showing sample data.</p>
+            ) : showVagueIdeaMessage ? (
+              <div className="text-center py-4">
+                <p className="text-sm text-neutral-400 mb-2">💡 Try describing what your idea does or who it helps — then we&apos;ll find competitors for you.</p>
+              </div>
+            ) : competitorData ? (
+              <>
+                <p className="text-sm text-neutral-400">We found {competitorData.count} similar players in this space.</p>
+                {Array.isArray(competitorData.categories) && competitorData.categories.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs text-neutral-500 mb-1">AI mapped your concept across these industries 🚀</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {competitorData.categories.slice(0, 4).map((cat: string, i: number) => (
+                        <span key={i} className="px-2 py-1 rounded-full text-[10px] uppercase tracking-wide bg-neutral-800/60 border border-neutral-700 text-neutral-300">
+                          {cat.split(/\s+/).slice(0, 3).join(' ')}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-neutral-500 mt-2 italic">These categories help frame your idea&apos;s real-world potential.</p>
+                  </div>
+                )}
+                <p className="text-sm text-neutral-500">Create a free account to see detailed competitor insights.</p>
+              </>
+            ) : (
+              <p className="text-sm text-neutral-400">We found 3 similar players in this space.</p>
+            )}
+          </div>
+
+          {/* Competitor cards */}
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
+            {competitorLoading ? (
+              [1, 2, 3].map((i) => (
+                <div key={i} className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg">
+                  <div className="space-y-2">
+                    <div className="h-4 bg-neutral-700 rounded shimmer animate-pulse"></div>
+                    <div className="h-3 bg-neutral-700 rounded w-3/4 animate-pulse"></div>
+                    <div className="h-3 bg-neutral-700 rounded w-1/2 animate-pulse"></div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                      <div className="text-xs text-neutral-500">Analyzing...</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : competitorData ? (
+              Array.from({ length: Math.min(3, Math.max(competitorData.count || 3, 3)) }).map((_, i: number) => (
+                <div key={i} className="relative">
+                  <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
+                    <div className="space-y-2">
+                      <div className="h-4 bg-neutral-700 rounded"></div>
+                      <p className="text-xs text-neutral-400">{(competitorData.categories && competitorData.categories[i % (competitorData.categories.length || 1)]) || 'Category'}</p>
+                      <div className="h-3 bg-neutral-700 rounded w-2/3"></div>
+                      <div className="h-3 bg-neutral-700 rounded w-3/4"></div>
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-neutral-900/80 rounded-full p-2">
+                      <span className="text-2xl">🔒</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              [1, 2, 3].map((i) => (
+                <div key={i} className="relative">
+                  <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
+                    <div className="space-y-2">
+                      <div className="h-4 bg-neutral-700 rounded"></div>
+                      <div className="h-3 bg-neutral-700 rounded w-3/4"></div>
+                      <div className="h-3 bg-neutral-700 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-neutral-900/80 rounded-full p-2">
+                      <span className="text-2xl">🔒</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Unlock button */}
+          <div className="text-center mt-10 pb-4">
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event('open-login-modal'))}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg"
+            >
+              🔓 See Full AI Insights
+            </button>
+            <p className="text-sm text-neutral-400 mt-3 max-w-2xl mx-auto leading-relaxed">
+              ✨ Unlock the full journey — discover real competitors, AI-identified opportunities, and get your personalized roadmap to turn this idea into reality.
+            </p>
+          </div>
         </div>
       )}
 

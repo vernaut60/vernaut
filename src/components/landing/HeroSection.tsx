@@ -87,9 +87,74 @@ export default function HeroSection() {
           }}
         ></div>
         
-        {/* Floating idea sparks */}
+        {/* Floating idea sparks - distributed across entire screen */}
         <div className="absolute inset-0 pointer-events-none">
-          {/* Spark 1 */}
+          {/* Top section sparks */}
+          <div 
+            className="absolute w-1 h-1 bg-blue-400 rounded-full animate-[ideaSpark_6s_ease-out_infinite]"
+            style={{ 
+              left: '15%', 
+              top: '15%',
+              animationDelay: '0s'
+            }}
+          ></div>
+          
+          <div 
+            className="absolute w-1.5 h-1.5 bg-purple-400 rounded-full animate-[ideaSpark_8s_ease-out_infinite]"
+            style={{ 
+              left: '85%', 
+              top: '20%',
+              animationDelay: '2s'
+            }}
+          ></div>
+          
+          <div 
+            className="absolute w-1 h-1 bg-cyan-400 rounded-full animate-[ideaSpark_7s_ease-out_infinite]"
+            style={{ 
+              left: '60%', 
+              top: '10%',
+              animationDelay: '4s'
+            }}
+          ></div>
+          
+          {/* Middle section sparks */}
+          <div 
+            className="absolute w-1 h-1 bg-indigo-400 rounded-full animate-[ideaSpark_9s_ease-out_infinite]"
+            style={{ 
+              left: '25%', 
+              top: '40%',
+              animationDelay: '1s'
+            }}
+          ></div>
+          
+          <div 
+            className="absolute w-1.5 h-1.5 bg-pink-400 rounded-full animate-[ideaSpark_6.5s_ease-out_infinite]"
+            style={{ 
+              left: '75%', 
+              top: '35%',
+              animationDelay: '3s'
+            }}
+          ></div>
+          
+          <div 
+            className="absolute w-1 h-1 bg-emerald-400 rounded-full animate-[ideaSpark_7.5s_ease-out_infinite]"
+            style={{ 
+              left: '45%', 
+              top: '50%',
+              animationDelay: '1.5s'
+            }}
+          ></div>
+          
+          <div 
+            className="absolute w-1.5 h-1.5 bg-amber-400 rounded-full animate-[ideaSpark_8.5s_ease-out_infinite]"
+            style={{ 
+              left: '10%', 
+              top: '60%',
+              animationDelay: '2.5s'
+            }}
+          ></div>
+          
+          {/* Bottom section sparks */}
           <div 
             className="absolute w-1 h-1 bg-blue-400 rounded-full animate-[ideaSpark_6s_ease-out_infinite]"
             style={{ 
@@ -99,7 +164,6 @@ export default function HeroSection() {
             }}
           ></div>
           
-          {/* Spark 2 */}
           <div 
             className="absolute w-1.5 h-1.5 bg-purple-400 rounded-full animate-[ideaSpark_8s_ease-out_infinite]"
             style={{ 
@@ -109,7 +173,6 @@ export default function HeroSection() {
             }}
           ></div>
           
-          {/* Spark 3 */}
           <div 
             className="absolute w-1 h-1 bg-cyan-400 rounded-full animate-[ideaSpark_7s_ease-out_infinite]"
             style={{ 
@@ -119,7 +182,6 @@ export default function HeroSection() {
             }}
           ></div>
           
-          {/* Spark 4 */}
           <div 
             className="absolute w-1 h-1 bg-indigo-400 rounded-full animate-[ideaSpark_9s_ease-out_infinite]"
             style={{ 
@@ -129,7 +191,6 @@ export default function HeroSection() {
             }}
           ></div>
           
-          {/* Spark 5 */}
           <div 
             className="absolute w-1.5 h-1.5 bg-pink-400 rounded-full animate-[ideaSpark_6.5s_ease-out_infinite]"
             style={{ 

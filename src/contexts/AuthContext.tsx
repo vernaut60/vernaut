@@ -53,6 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Session refresh error:', error)
         setSessionError('Failed to refresh session. Please sign in again.')
         setIsSessionExpired(true)
+        // Ensure UI reflects logged-out state immediately on failure
+        setUser(null)
+        setSession(null)
         return false
       }
       
@@ -64,11 +67,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return true
       }
       
+      // No session returned - treat as logged out
+      setUser(null)
+      setSession(null)
       return false
     } catch (error) {
       console.error('Session refresh error:', error)
       setSessionError('Failed to refresh session. Please sign in again.')
       setIsSessionExpired(true)
+      // Ensure UI reflects logged-out state on exceptions as well
+      setUser(null)
+      setSession(null)
       return false
     } finally {
       setLoading(false)

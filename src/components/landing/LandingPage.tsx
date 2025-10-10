@@ -3,7 +3,6 @@ import HowItWorks from "./HowItWorks";
 import DemoSection from "./DemoSection";
 import ValueProps from "./ValueProps";
 import SignupCTA from "./SignupCTA";
-import DashboardTeaser from "../dashboard/DashboardTeaser";
 import FinalCTA from "./FinalCTA";
 
 export default function LandingPage() {
@@ -14,7 +13,6 @@ export default function LandingPage() {
       <DemoSection />
       <ValueProps />
       <SignupCTA />
-      <DashboardTeaser />
       <FinalCTA />
     </div>
   );
