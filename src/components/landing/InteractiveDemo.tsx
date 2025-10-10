@@ -11,6 +11,31 @@ interface IdeaBreakdown {
   solution: string
   monetization: string
   created_at: string
+  ai_insights?: {
+    tier?: 'weak' | 'average' | 'good' | 'exceptional'
+    ai_verdict?: string
+    strengths?: string[]
+    challenges?: string[]
+    recommendation?: string
+  }
+  score?: number
+  risk_analysis?: {
+    overall_score?: number
+    risk_level?: string
+    category_scores?: {
+      business_viability?: number
+      market_timing?: number
+      competition_level?: number
+      execution_difficulty?: number
+    }
+    top_risks?: Array<{
+      title?: string
+      severity?: string
+      likelihood?: string
+      description?: string
+      mitigation?: string
+    }>
+  }
 }
 
 interface InteractiveDemoProps {
@@ -75,50 +100,40 @@ const PLACEHOLDER_EXAMPLES = [
   const [isResetting, setIsResetting] = useState(false)
   const [analysisDuration, setAnalysisDuration] = useState<number | null>(null)
   
+  
   // Competitor analysis state
   const [competitorData, setCompetitorData] = useState<{ analysisId: string; count: number; categories: string[]; blurred: boolean } | null>(null)
-  const [competitorLoading, setCompetitorLoading] = useState(false)
   const [competitorError, setCompetitorError] = useState<string | null>(null)
   const [showVagueIdeaMessage, setShowVagueIdeaMessage] = useState(false)
   const [isBreakdownVague, setIsBreakdownVague] = useState(false)
   const [ideaScore, setIdeaScore] = useState<number | null>(null)
   const [isCalculatingScore, setIsCalculatingScore] = useState(false)
+  const [shouldAnimateCTA, setShouldAnimateCTA] = useState(false)
 
   // Simple static number display
   const AnimatedNumber = ({ value }: { value: number }) => {
     return <span>{value}</span>
   }
 
-  // Function to compute idea strength score based on refinement output
-  const computeIdeaScore = (refinedData: IdeaBreakdown) => {
-    const fields = [
-      refinedData.problem,
-      refinedData.audience,
-      refinedData.solution,
-      refinedData.monetization
-    ];
-    const textLengths = fields.map(f => f.length);
-    const avgLength = textLengths.reduce((a, b) => a + b, 0) / fields.length;
-
-    const clarity = Math.min(1, avgLength / 180); // was 120 → now stricter
-    const completeness = fields.filter(f => f.trim().length > 60).length / 4; // require richer text
-    const balance = 1 - Math.min(1, Math.abs(textLengths[0] - textLengths[2]) / 300);
-
-    // Weighted baseline with stronger penalty for short or uneven text
-    const weights = { problem: 0.35, audience: 0.25, solution: 0.25, monetization: 0.15 };
-    const weightedSum = fields.reduce(
-      (acc, f, i) => acc + (f.length / 200) * Object.values(weights)[i],
-      0
-    );
-
-    // Raw score before smoothing
-    const rawScore = (clarity * 0.4 + completeness * 0.3 + balance * 0.2 + weightedSum * 0.1) * 100;
-
-    // Gaussian-like normalization — more realistic spread
-    const normalized = 45 + (rawScore - 50) * 0.8 + (Math.random() - 0.5) * 10;
-
-    return Math.round(Math.min(95, Math.max(30, normalized)));
+  // Smooth scroll to competitor CTA
+  const scrollToCompetitorCTA = () => {
+    const element = document.getElementById('competitor-cta')
+    if (element) {
+      element.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'center'
+      })
+      
+      // Trigger subtle animation after scroll
+      setTimeout(() => {
+        setShouldAnimateCTA(true)
+        setTimeout(() => {
+          setShouldAnimateCTA(false)
+        }, 1000)
+      }, 300)
+    }
   }
+
 
   // Function to detect vague breakdown results
   const detectVagueBreakdown = (breakdown: IdeaBreakdown) => {
@@ -286,22 +301,33 @@ const PLACEHOLDER_EXAMPLES = [
         const isVague = detectVagueBreakdown(data.idea)
         setIsBreakdownVague(isVague)
         
-        // Calculate idea strength score with micro-loading
+        // Use backend score with micro-loading
         setIsCalculatingScore(true)
-        const score = computeIdeaScore(data.idea)
         
         // Show "AI thinking" for 1.5 seconds before revealing score
         setTimeout(() => {
-          setIdeaScore(score)
+          setIdeaScore(data.idea.score || 0)
           setIsCalculatingScore(false)
         }, 1500)
         
-        console.log(`Breakdown analysis completed`, { isVague, score })
+        console.log(`Breakdown analysis completed`, { isVague, score: data.idea.score })
+        console.log('Full API response:', data)
+        console.log('Competitor analysis in response:', data.idea.competitor_analysis)
+        console.log('API response keys:', Object.keys(data.idea || {}))
         
-        // Start competitor analysis with refined data
-        if (!isVague) {
-          const competitorPayload = `${data.idea.solution}. Target audience: ${data.idea.audience}.`
-          fetchCompetitorAnalysis(competitorPayload, startTime)
+        // Reset vague state since API call succeeded
+        setIsBreakdownVague(false)
+        
+        // Use competitor analysis from main API response
+        if (data.idea.competitor_analysis) {
+          console.log('Setting competitor data:', data.idea.competitor_analysis)
+          setCompetitorData(data.idea.competitor_analysis)
+          // Calculate total analysis duration since everything is now in one call
+          const totalDuration = Date.now() - startTime
+          setAnalysisDuration(totalDuration)
+          console.log(`Total analysis completed in ${totalDuration}ms (${Math.round(totalDuration / 1000)} seconds)`)
+        } else {
+          console.log('Competitor analysis not set:', { isVague, hasCompetitorAnalysis: !!data.idea.competitor_analysis })
         }
       } else {
         // Handle API error (like vague input rejection)
@@ -334,45 +360,7 @@ const PLACEHOLDER_EXAMPLES = [
     }
   }
 
-  // Competitor analysis API call
-  const fetchCompetitorAnalysis = async (idea: string, startTime: number) => {
-    setCompetitorLoading(true)
-    setCompetitorError(null)
-    
-    try {
-      const response = await fetch('/api/analyze-competitors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea }),
-      })
-      
-      const data = await response.json()
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to analyze competitors')
-      }
-      
-      // Handle skipCompetitors response
-      if (data.data.skipCompetitors) {
-        setCompetitorData(null)
-        setShowVagueIdeaMessage(true)
-        return
-      }
-      
-      // Teaser-only payload: { analysisId, count, categories, blurred }
-      setCompetitorData(data.data)
-      
-      // Calculate total analysis duration when competitor analysis completes
-      const totalDuration = Date.now() - startTime
-      setAnalysisDuration(totalDuration)
-      console.log(`Total analysis completed in ${totalDuration}ms (${Math.round(totalDuration / 1000)} seconds)`)
-    } catch (error) {
-      console.error('Competitor analysis error:', error)
-      setCompetitorError(error instanceof Error ? error.message : 'Failed to analyze competitors')
-    } finally {
-      setCompetitorLoading(false)
-    }
-  }
+  // Competitor analysis is now included in the main API response
 
   // Progressive card reveal effect
   useEffect(() => {
@@ -491,10 +479,13 @@ const PLACEHOLDER_EXAMPLES = [
           >
             <div className="text-center relative z-10">
               <div className="text-2xl mb-2">✨</div>
-              <p className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 font-semibold text-xl drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]">
-                Analysis Complete!
+              <p className="font-semibold text-xl flex items-center justify-center gap-2">
+                <span className="text-2xl">🎉</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]">
+                  Your idea just got validated!
+                </span>
               </p>
-              <p className="text-neutral-300 text-sm mb-2">Your business insights are ready.</p>
+              <p className="text-neutral-300 text-sm mb-2">Your business insights are ready to explore.</p>
               
               {/* Analysis duration - shown immediately */}
               {analysisDuration ? (
@@ -705,25 +696,29 @@ const PLACEHOLDER_EXAMPLES = [
         }`}>
           {breakdownLoading ? (
             <div className="space-y-4">
-              {/* Typing indicator with rotating subtext */}
+              {/* Enhanced loading indicator */}
               <div className="text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <span className="text-sm text-neutral-400">Analyzing your idea</span>
-                  <div className="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+                <div className="flex items-center justify-center gap-3 mb-4">
+                  <div className="relative">
+                    <div className="w-8 h-8 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 w-8 h-8 border-2 border-transparent border-t-emerald-300 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
                   </div>
+                  <span className="text-sm font-medium text-neutral-300">Analyzing your idea</span>
                 </div>
-                <p className="text-xs text-neutral-500 mb-1 transition-opacity duration-300">
+                <p className="text-sm text-neutral-400 mb-2 transition-all duration-500 ease-in-out">
                   {breakdownLoading ? [
-                    "Identifying key problems...",
-                    "Defining your target audience...",
-                    "Shaping a solution...",
-                    "Exploring monetization models..."
+                    "🔍 Identifying key problems...",
+                    "👥 Defining your target audience...",
+                    "💡 Shaping a solution...",
+                    "💰 Exploring monetization models..."
                   ][currentSubtext] : "Preparing your business breakdown..."}
                 </p>
-                <p className="text-xs text-neutral-600">
+                <div className="flex items-center justify-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '200ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></div>
+                </div>
+                <p className="text-xs text-neutral-500 mt-3">
                   This usually takes ~5–10 seconds
                 </p>
               </div>
@@ -731,16 +726,16 @@ const PLACEHOLDER_EXAMPLES = [
               {/* Skeleton cards with progressive reveal */}
               <div className="grid gap-4 md:grid-cols-2">
                 {[
-                  { icon: "🎯", title: "Problem", color: "text-blue-400" },
-                  { icon: "👥", title: "Audience", color: "text-green-400" },
-                  { icon: "💡", title: "Solution", color: "text-purple-400" },
-                  { icon: "💰", title: "Monetization", color: "text-yellow-400" }
+                  { icon: "🎯", title: "Problem", color: "text-blue-400", bgColor: "from-blue-900/20 to-blue-800/10", borderColor: "border-blue-500/30" },
+                  { icon: "👥", title: "Audience", color: "text-green-400", bgColor: "from-green-900/20 to-green-800/10", borderColor: "border-green-500/30" },
+                  { icon: "💡", title: "Solution", color: "text-purple-400", bgColor: "from-purple-900/20 to-purple-800/10", borderColor: "border-purple-500/30" },
+                  { icon: "💰", title: "Monetization", color: "text-yellow-400", bgColor: "from-yellow-900/20 to-yellow-800/10", borderColor: "border-yellow-500/30" }
                 ].map((section, i) => {
                   const isRevealed = revealedCards.includes(i)
                   return (
                     <div 
                       key={i} 
-                      className={`p-4 bg-neutral-700/30 rounded-lg transition-all duration-500 ${
+                      className={`p-4 bg-gradient-to-br ${section.bgColor} rounded-lg border ${section.borderColor} transition-all duration-500 ${
                         isRevealed 
                           ? 'opacity-100 transform translate-y-0 animate-[fadeInUp_0.4s_ease-out_forwards]' 
                           : 'opacity-0 transform translate-y-4'
@@ -757,13 +752,13 @@ const PLACEHOLDER_EXAMPLES = [
                       <div className="space-y-2">
                         {isRevealed ? (
                           <>
-                            <div className="h-3 bg-neutral-600 rounded shimmer animate-pulse"></div>
-                            <div className="h-3 bg-neutral-600 rounded shimmer w-4/5 animate-pulse"></div>
-                            <div className="h-3 bg-neutral-600 rounded shimmer w-3/5 animate-pulse"></div>
-                            <div className="h-3 bg-neutral-600 rounded shimmer w-2/3 animate-pulse"></div>
+                            <div className="h-3 bg-neutral-600/50 rounded shimmer animate-pulse"></div>
+                            <div className="h-3 bg-neutral-600/50 rounded shimmer w-4/5 animate-pulse"></div>
+                            <div className="h-3 bg-neutral-600/50 rounded shimmer w-3/5 animate-pulse"></div>
+                            <div className="h-3 bg-neutral-600/50 rounded shimmer w-2/3 animate-pulse"></div>
                           </>
                         ) : (
-                          <div className="h-12 bg-neutral-800/50 rounded"></div>
+                          <div className="h-12 bg-neutral-800/30 rounded"></div>
                         )}
                       </div>
                     </div>
@@ -778,15 +773,19 @@ const PLACEHOLDER_EXAMPLES = [
                 <div className="text-center mb-4 p-3 bg-gradient-to-r from-neutral-800/50 to-neutral-700/30 rounded-xl border border-neutral-600/30 relative z-0">
                   {isCalculatingScore ? (
                     // AI Thinking state
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <span className="text-sm font-medium text-neutral-300">Assessing idea strength...</span>
-                      <span className="text-lg animate-pulse">💭</span>
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <span className="text-sm font-medium text-neutral-300">Crunching the numbers...</span>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
                     </div>
                   ) : (
                     // Score revealed state
                     <>
                       <div className="flex items-center justify-center gap-2 mb-2">
-                        <span className="text-sm font-medium text-neutral-300">💡 Idea Strength:</span>
+                        <span className="text-sm font-medium text-neutral-300">💡 Your idea scored:</span>
                         <span className={`text-lg font-bold animate-[fadeInUp_0.5s_ease-out_forwards] ${
                           ideaScore! > 85 ? 'text-emerald-400' :
                           ideaScore! > 70 ? 'text-green-400' :
@@ -796,6 +795,23 @@ const PLACEHOLDER_EXAMPLES = [
                         }`}>
                           <AnimatedNumber value={ideaScore!} />%
                         </span>
+                        {breakdownData?.ai_insights?.tier && (
+                          <>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              breakdownData.ai_insights.tier === 'weak' ? 'bg-red-500/15 text-red-300 border border-red-500/30' :
+                              breakdownData.ai_insights.tier === 'average' ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30' :
+                              breakdownData.ai_insights.tier === 'good' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' :
+                              breakdownData.ai_insights.tier === 'exceptional' ? 'bg-yellow-500/15 text-yellow-300 border border-yellow-500/30' :
+                              'bg-neutral-500/15 text-neutral-300 border border-neutral-500/30'
+                            }`}>
+                              {breakdownData.ai_insights.tier === 'weak' ? 'Weak' :
+                               breakdownData.ai_insights.tier === 'average' ? 'Strong' :
+                               breakdownData.ai_insights.tier === 'good' ? 'Good' :
+                               breakdownData.ai_insights.tier === 'exceptional' ? 'Exceptional' :
+                               'Unknown'}
+                            </span>
+                          </>
+                        )}
                       </div>
                       
                       {/* Progress bar */}
@@ -834,44 +850,371 @@ const PLACEHOLDER_EXAMPLES = [
                   )}
                 </div>
               )}
+
               
               {/* Connector phrase - only show when results are loaded */}
               <div className="text-center mb-4">
                 <p className="text-sm text-neutral-400">
-                  Based on this refined idea, here&apos;s the breakdown 👇
+                  Here&apos;s what we discovered 👇
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="p-4 bg-neutral-700/30 rounded-lg animate-[slideUpStagger_0.6s_ease-out_0s_forwards] opacity-0">
-                  <h3 className="text-sm font-semibold text-blue-400 mb-2">🎯 Problem</h3>
-                  <p className="text-neutral-300 text-sm">{breakdownData.problem}</p>
+                <div className="p-4 bg-gradient-to-br from-blue-900/20 to-blue-800/10 rounded-lg border border-blue-500/30 animate-[slideUpStagger_0.6s_ease-out_0s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-sm font-semibold text-blue-400 mb-3 flex items-center gap-2">
+                    <span>🎯</span>
+                    <span>Problem</span>
+                  </h3>
+                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.problem}</p>
                 </div>
-                <div className="p-4 bg-neutral-700/30 rounded-lg animate-[slideUpStagger_0.6s_ease-out_0.2s_forwards] opacity-0">
-                  <h3 className="text-sm font-semibold text-green-400 mb-2">👥 Audience</h3>
-                  <p className="text-neutral-300 text-sm">{breakdownData.audience}</p>
+                <div className="p-4 bg-gradient-to-br from-green-900/20 to-green-800/10 rounded-lg border border-green-500/30 animate-[slideUpStagger_0.6s_ease-out_0.2s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
+                    <span>👥</span>
+                    <span>Audience</span>
+                  </h3>
+                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.audience}</p>
                 </div>
-                <div className="p-4 bg-neutral-700/30 rounded-lg animate-[slideUpStagger_0.6s_ease-out_0.4s_forwards] opacity-0">
-                  <h3 className="text-sm font-semibold text-purple-400 mb-2">💡 Solution</h3>
-                  <p className="text-neutral-300 text-sm">{breakdownData.solution}</p>
+                <div className="p-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-lg border border-purple-500/30 animate-[slideUpStagger_0.6s_ease-out_0.4s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                    <span>💡</span>
+                    <span>Solution</span>
+                  </h3>
+                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.solution}</p>
                 </div>
-                <div className="p-4 bg-neutral-700/30 rounded-lg animate-[slideUpStagger_0.6s_ease-out_0.6s_forwards] opacity-0">
-                  <h3 className="text-sm font-semibold text-yellow-400 mb-2">💰 Monetization</h3>
-                  <p className="text-neutral-300 text-sm">{breakdownData.monetization}</p>
+                <div className="p-4 bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 rounded-lg border border-yellow-500/30 animate-[slideUpStagger_0.6s_ease-out_0.6s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-sm font-semibold text-yellow-400 mb-3 flex items-center gap-2">
+                    <span>💰</span>
+                    <span>Monetization</span>
+                  </h3>
+                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.monetization}</p>
                 </div>
               </div>
+              
             </div>
           ) : null}
         </div>
       )}
 
+      {/* Risk Assessment Section - New section between 4 cards and AI Analysis badge */}
+      {(breakdownData?.risk_analysis || breakdownLoading) && (
+        <div className="mt-12 mb-8">
+          <div className="p-6 bg-gradient-to-br from-amber-900/20 to-orange-900/20 border border-amber-500/30 rounded-xl backdrop-blur-sm shadow-lg">
+            {/* Risk Assessment Header */}
+            <div className="text-center mb-6">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <span className="text-2xl">⚠️</span>
+                <h3 className="text-xl font-semibold text-amber-200">Risk Assessment</h3>
+              </div>
+              
+              {breakdownLoading ? (
+                <div className="mb-6">
+                  <div className="flex items-center justify-center gap-2 mb-4">
+                    <div className="w-6 h-6 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin"></div>
+                    <span className="text-sm text-amber-300">Analyzing risks...</span>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="h-4 bg-amber-800/30 rounded animate-pulse"></div>
+                    <div className="h-4 bg-amber-800/30 rounded w-3/4 mx-auto animate-pulse"></div>
+                  </div>
+                </div>
+              ) : (
+                /* Overall Risk Score */
+                <div className="mb-6">
+                  <div className="text-3xl font-bold text-amber-300 mb-2">
+                    {breakdownData?.risk_analysis?.overall_score}/10
+                  </div>
+                  <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                    breakdownData?.risk_analysis?.risk_level === 'Low' ? 'bg-green-500/15 text-green-300 border border-green-500/30' :
+                    breakdownData?.risk_analysis?.risk_level === 'Medium' ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' :
+                    breakdownData?.risk_analysis?.risk_level === 'High' ? 'bg-red-500/15 text-red-300 border border-red-500/30' :
+                    'bg-neutral-500/15 text-neutral-300 border border-neutral-500/30'
+                  }`}>
+                    {breakdownData?.risk_analysis?.risk_level} Risk
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Risk Category Bars */}
+            {breakdownLoading ? (
+              <div className="space-y-4 mb-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="h-4 bg-amber-800/30 rounded w-32 animate-pulse" style={{ animationDuration: '2s' }}></div>
+                      <div className="h-4 bg-amber-800/30 rounded w-12 animate-pulse" style={{ animationDuration: '2s' }}></div>
+                    </div>
+                    <div className="w-full bg-neutral-700/50 rounded-full h-2">
+                      <div className="bg-amber-800/30 h-2 rounded-full animate-pulse" style={{ width: `${Math.random() * 60 + 20}%`, animationDuration: '2s' }}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4 mb-6">
+                {Object.entries(breakdownData?.risk_analysis?.category_scores || {}).map(([category, score]) => {
+                const categoryNames = {
+                  business_viability: '💼 Business Viability',
+                  market_timing: '📅 Market Timing', 
+                  competition_level: '⚔️ Competition',
+                  execution_difficulty: '📊 Execution'
+                }
+                
+                const scoreValue = score as number
+                const percentage = scoreValue * 10
+                
+                // Color coding based on risk level
+                const getRiskColors = (score: number) => {
+                  if (score <= 5) {
+                    // Lower Risk (0-5) → Yellow/Green tones
+                    return 'from-yellow-400 to-green-400'
+                  } else if (score <= 7) {
+                    // Medium Risk (5-7) → Yellow/Orange tones  
+                    return 'from-yellow-400 to-orange-400'
+                  } else {
+                    // Higher Risk (7-10) → Orange/Red tones
+                    return 'from-orange-400 to-red-400'
+                  }
+                }
+                
+                return (
+                  <div key={category} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-amber-200">
+                        {categoryNames[category as keyof typeof categoryNames] || category}
+                      </span>
+                      <span className="text-sm text-amber-300">{scoreValue}/10</span>
+                    </div>
+                    <div className="w-full bg-neutral-700/50 rounded-full h-2">
+                      <div 
+                        className={`bg-gradient-to-r ${getRiskColors(scoreValue)} h-2 rounded-full transition-all duration-1000 ease-out`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )
+              })}
+              </div>
+            )}
+
+            {/* Top 3 Critical Risks - Blurred Teaser */}
+            {!breakdownLoading && (
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-amber-200 mb-4 flex items-center gap-2">
+                <span>🚨</span>
+                <span>Top 3 Critical Risks</span>
+              </h4>
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
+                {breakdownData?.risk_analysis?.top_risks?.slice(0, 3).map((risk, index) => (
+                  <div key={index} className="relative">
+                    <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
+                      <div className="space-y-2">
+                        <div className="h-4 bg-neutral-700 rounded w-3/4 font-medium text-neutral-300">
+                          {risk.title}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-2 py-1 bg-red-500/20 text-red-300 rounded">
+                            {risk.severity} Severity
+                          </span>
+                          <span className="text-xs px-2 py-1 bg-orange-500/20 text-orange-300 rounded">
+                            {risk.likelihood} Likelihood
+                          </span>
+                        </div>
+                        <div className="h-3 bg-neutral-700 rounded w-full text-xs text-neutral-400">
+                          {risk.description}
+                        </div>
+                        <div className="h-3 bg-neutral-700 rounded w-2/3 text-xs text-neutral-400">
+                          {risk.mitigation}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Lock icon positioned in middle, not blurred */}
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-neutral-500 bg-neutral-900/90 px-3 py-2 rounded-lg shadow-lg">
+                      <span className="text-xl">🔒</span>
+                      <span className="text-sm font-medium">Locked</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
+
+            {/* Small Contextual CTA */}
+            <div className="text-center">
+              <p className="text-sm text-neutral-400 mb-3">
+                💡 This is just the beginning.
+              </p>
+              <button 
+                onClick={scrollToCompetitorCTA}
+                className="text-sm text-amber-300 hover:text-amber-100 underline underline-offset-2 hover:underline-offset-4 transition-all duration-200 group"
+              >
+                <span className="group-hover:translate-x-0.5 transition-transform duration-200 inline-block">
+                  See everything included →
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Insights Section - Prominent and integrated */}
+      {(breakdownData || breakdownLoading) && (
+        <>
+          {/* Visual connector */}
+          <div className="mt-6 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-full border border-indigo-500/30 text-sm text-indigo-300">
+              <span>✨</span>
+              <span>{breakdownData?.ai_insights ? 'AI Analysis Complete' : 'AI Analysis in Progress'}</span>
+              <span>✨</span>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-6 bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl backdrop-blur-sm shadow-lg">
+          {/* AI Insights Header - More prominent */}
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <span className="text-2xl">🧠</span>
+              <h3 className="text-xl font-semibold text-white">AI Insights</h3>
+            </div>
+            {breakdownData?.ai_insights ? (
+              <div className="text-sm text-neutral-300 leading-relaxed max-w-2xl mx-auto">
+                {breakdownData.ai_insights.ai_verdict}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+                <span className="text-sm text-neutral-400">Generating insights...</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Detailed insights - hierarchical layout */}
+          {breakdownData?.ai_insights ? (
+            <div className="space-y-6">
+              {/* Action Plan - Most prominent (primary) */}
+              {breakdownData.ai_insights.recommendation && (
+              <div className="p-6 bg-gradient-to-br from-purple-900/30 to-indigo-900/30 rounded-xl border-2 border-purple-400/40 shadow-lg">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-purple-500/20 rounded-lg">
+                    <span className="text-lg">📋</span>
+                  </div>
+                  <h4 className="text-lg font-semibold text-purple-200">Action Plan</h4>
+                </div>
+                <div className="text-base text-neutral-200 leading-relaxed">
+                  {breakdownData.ai_insights.recommendation?.split('Step ').map((step, index) => {
+                    if (index === 0) return step; // First part before any "Step"
+                    // Remove the number from the step text since we're adding it as a visual element
+                    const stepText = step.replace(/^\d+:\s*/, '');
+                    return (
+                      <div key={index} className="mt-3 flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-xs font-semibold text-purple-300">
+                          {index}
+                        </div>
+                        <div className="flex-1">{stepText}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {/* Secondary insights - side by side */}
+            <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
+              {/* Strengths */}
+              {breakdownData.ai_insights.strengths && breakdownData.ai_insights.strengths.length > 0 && (
+                <div className="p-4 bg-green-900/20 rounded-lg border border-green-400/30">
+                  <h4 className="text-sm font-semibold text-green-300 mb-3 flex items-center gap-2">
+                    <span>Strengths</span>
+                    <span className="text-xs">💪</span>
+                  </h4>
+                  <ul className="space-y-2">
+                    {breakdownData.ai_insights.strengths.map((strength, index) => (
+                      <li key={index} className="text-sm text-neutral-300 flex items-start gap-2">
+                        <span className="text-green-400 mt-1 flex-shrink-0">•</span>
+                        <span className="leading-relaxed">{strength}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Challenges */}
+              {breakdownData.ai_insights.challenges && breakdownData.ai_insights.challenges.length > 0 && (
+                <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-400/30">
+                  <h4 className="text-sm font-semibold text-yellow-300 mb-3 flex items-center gap-2">
+                    <span>Challenges</span>
+                    <span className="text-xs">⚠️</span>
+                  </h4>
+                  <ul className="space-y-2">
+                    {breakdownData.ai_insights.challenges.map((challenge, index) => (
+                      <li key={index} className="text-sm text-neutral-300 flex items-start gap-2">
+                        <span className="text-yellow-400 mt-1 flex-shrink-0">•</span>
+                        <span className="leading-relaxed">{challenge}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+          ) : (
+            /* AI Insights Loading State */
+            <div className="space-y-4">
+              <div className="p-6 bg-gradient-to-br from-purple-900/20 to-indigo-900/20 rounded-xl border border-purple-500/30">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-purple-500/20 rounded-lg">
+                    <div className="w-6 h-6 bg-purple-400/30 rounded animate-pulse"></div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-purple-400/30 rounded w-24 mb-2 animate-pulse"></div>
+                    <div className="h-3 bg-neutral-600/50 rounded w-full animate-pulse"></div>
+                    <div className="h-3 bg-neutral-600/50 rounded w-3/4 mt-2 animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
+                <div className="p-4 bg-green-900/20 rounded-lg border border-green-400/30">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 bg-green-400/30 rounded animate-pulse"></div>
+                    <div className="h-4 bg-green-400/30 rounded w-16 animate-pulse"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-neutral-600/50 rounded animate-pulse"></div>
+                    <div className="h-3 bg-neutral-600/50 rounded w-4/5 animate-pulse"></div>
+                    <div className="h-3 bg-neutral-600/50 rounded w-2/3 animate-pulse"></div>
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-400/30">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 bg-yellow-400/30 rounded animate-pulse"></div>
+                    <div className="h-4 bg-yellow-400/30 rounded w-20 animate-pulse"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-neutral-600/50 rounded animate-pulse"></div>
+                    <div className="h-3 bg-neutral-600/50 rounded w-3/4 animate-pulse"></div>
+                    <div className="h-3 bg-neutral-600/50 rounded w-1/2 animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        </>
+      )}
+
       {/* Competitor Landscape Section - Now positioned outside results container for better mobile layout */}
-      {(competitorLoading || competitorData || competitorError || showVagueIdeaMessage) && (
+      {(breakdownLoading || competitorData || competitorError || showVagueIdeaMessage) && (
         <div className="mt-6 p-6 bg-neutral-800/30 border border-neutral-600/50 rounded-xl backdrop-blur-sm">
           <div className="text-center mb-4">
             <h3 className="text-lg font-semibold text-neutral-300 mb-2">
               Competitor Landscape 🔒
             </h3>
-            {competitorLoading ? (
+            {breakdownLoading ? (
               <div className="space-y-2">
                 <p className="text-sm text-neutral-400">Analyzing competitor landscape...</p>
                 <div className="flex items-center justify-center gap-2">
@@ -911,7 +1254,7 @@ const PLACEHOLDER_EXAMPLES = [
 
           {/* Competitor cards */}
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
-            {competitorLoading ? (
+            {breakdownLoading ? (
               [1, 2, 3].map((i) => (
                 <div key={i} className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg">
                   <div className="space-y-2">
@@ -963,24 +1306,59 @@ const PLACEHOLDER_EXAMPLES = [
             )}
           </div>
 
-          {/* Unlock button */}
-          <div className="text-center mt-10 pb-4">
+          {/* Primary CTA */}
+          <div 
+            id="competitor-cta" 
+            className={`text-center mt-10 pb-4 transition-all duration-500 ${
+              shouldAnimateCTA ? 'animate-pulse scale-105' : ''
+            }`}
+          >
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold text-white mb-2">
+                🔓 Unlock Complete Startup Intelligence
+              </h3>
+              <p className="text-neutral-300 mb-6">
+                Everything you need to validate and launch:
+              </p>
+              
+              {/* Benefits list */}
+              <div className="text-center max-w-md mx-auto space-y-2 mb-6">
+                <div className="flex items-center justify-center gap-2 text-sm text-neutral-300">
+                  <span className="text-green-400">✓</span>
+                  <span>Detailed risk analysis + mitigation plans</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 text-sm text-neutral-300">
+                  <span className="text-green-400">✓</span>
+                  <span>Full competitor positioning & pricing</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 text-sm text-neutral-300">
+                  <span className="text-green-400">✓</span>
+                  <span>90-day MVP roadmap with milestones</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 text-sm text-neutral-300">
+                  <span className="text-green-400">✓</span>
+                  <span>Export to Notion, PDF, Trello</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 text-sm text-neutral-300">
+                  <span className="text-green-400">✓</span>
+                  <span>Save & compare unlimited ideas</span>
+                </div>
+              </div>
+            </div>
+            
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event('open-login-modal'))}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg"
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg text-lg"
             >
-              🔓 See Full AI Insights
+              Unlock Full Analysis
             </button>
-            <p className="text-sm text-neutral-400 mt-3 max-w-2xl mx-auto leading-relaxed">
-              ✨ Unlock the full journey — discover real competitors, AI-identified opportunities, and get your personalized roadmap to turn this idea into reality.
-            </p>
           </div>
         </div>
       )}
 
       {/* Extra spacing to prevent overlap with next section */}
-      {isExpanded && (competitorLoading || competitorData || competitorError) && (
+      {isExpanded && (competitorData || competitorError) && (
         <div className="h-12"></div>
       )}
     </div>
