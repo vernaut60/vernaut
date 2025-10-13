@@ -100,6 +100,7 @@ const PLACEHOLDER_EXAMPLES = [
   const [currentSubtext, setCurrentSubtext] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [analysisDuration, setAnalysisDuration] = useState<number | null>(null)
+  const [isInputDisabled, setIsInputDisabled] = useState(false)
   
   
   // Competitor analysis state
@@ -281,6 +282,7 @@ const PLACEHOLDER_EXAMPLES = [
 
     setBreakdownLoading(true)
     setIsExpanded(true)
+    setIsInputDisabled(true)
     
     // Start timing
     const startTime = Date.now()
@@ -333,6 +335,9 @@ const PLACEHOLDER_EXAMPLES = [
         } else {
           console.log('Competitor analysis not set:', { isVague, hasCompetitorAnalysis: !!data.idea.competitor_analysis })
         }
+        
+        // Re-enable input after analysis completes
+        setIsInputDisabled(false)
       } else {
         // Handle API error (like vague input rejection)
         console.log('Breakdown API error:', data.error)
@@ -346,6 +351,9 @@ const PLACEHOLDER_EXAMPLES = [
           monetization: 'Add more context for analysis',
           created_at: new Date().toISOString()
         })
+        
+        // Re-enable input after error
+        setIsInputDisabled(false)
       }
     } catch (error) {
       console.error('Breakdown analysis error:', error)
@@ -359,6 +367,9 @@ const PLACEHOLDER_EXAMPLES = [
         monetization: 'Ensure idea is clear and business-related',
         created_at: new Date().toISOString()
       })
+      
+      // Re-enable input after catch error
+      setIsInputDisabled(false)
     } finally {
       setBreakdownLoading(false)
     }
@@ -452,6 +463,7 @@ const PLACEHOLDER_EXAMPLES = [
     // Clear the idea state
     setIdea('')
     setOriginalIdea('')
+    setIsInputDisabled(false)
     
     // Reset parent component
     onReset()
@@ -490,17 +502,7 @@ const PLACEHOLDER_EXAMPLES = [
 
     // Restore the original idea text
     setIdea(originalIdea)
-
-    // Focus textarea after a short delay
-    setTimeout(() => {
-      const textareaElement = document.getElementById('idea') as HTMLTextAreaElement
-      if (textareaElement) {
-        textareaElement.focus()
-        // Position cursor at the end of the text
-        const textLength = originalIdea.length
-        textareaElement.setSelectionRange(textLength, textLength)
-      }
-    }, 100)
+    setIsInputDisabled(false)
   }
 
 
@@ -619,9 +621,10 @@ const PLACEHOLDER_EXAMPLES = [
                 }}
                 onPaste={handlePaste}
                 ref={textareaRef}
+                disabled={isInputDisabled}
                 className={`w-full resize-none rounded-2xl border border-neutral-800 focus:border-neutral-700 focus:ring-2 focus:ring-blue-600/40 outline-none p-6 text-base shadow-lg transition-all duration-700 hover:border-neutral-700 hover:shadow-xl relative ${
                   idea.trim() ? 'bg-neutral-900 text-white' : 'bg-transparent text-transparent'
-                }`}
+                } ${isInputDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 style={{
                   caretColor: idea.trim() ? 'white' : 'rgb(156, 163, 175)' // gray-400
                 }}
@@ -635,6 +638,15 @@ const PLACEHOLDER_EXAMPLES = [
                     isPlaceholderAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
                   } text-neutral-500`}>
                     {PLACEHOLDER_EXAMPLES[currentPlaceholderIndex]}
+                  </div>
+                </div>
+              )}
+              
+              {/* Analysis overlay - masks input during analysis */}
+              {isInputDisabled && (
+                <div className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mb-3"></div>
                   </div>
                 </div>
               )}
