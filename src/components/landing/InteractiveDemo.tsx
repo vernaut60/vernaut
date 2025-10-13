@@ -45,6 +45,7 @@ interface InteractiveDemoProps {
 export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   // Idea state
   const [idea, setIdea] = useState('')
+  const [originalIdea, setOriginalIdea] = useState('') // Store original idea for editing
   
   // Guest session management
   const [guestSessionId, setGuestSessionId] = useState<string | null>(null)
@@ -272,6 +273,9 @@ const PLACEHOLDER_EXAMPLES = [
 
     console.log('🚀 handleRefineIdea running - this should not happen during reset!')
 
+    // Store the original idea for editing functionality
+    setOriginalIdea(idea.trim())
+
     // Use the refined preview if available, otherwise use the raw idea
     const ideaToAnalyze = refinedPreview.trim() || idea.trim()
 
@@ -447,6 +451,7 @@ const PLACEHOLDER_EXAMPLES = [
     
     // Clear the idea state
     setIdea('')
+    setOriginalIdea('')
     
     // Reset parent component
     onReset()
@@ -456,6 +461,44 @@ const PLACEHOLDER_EXAMPLES = [
       const textareaElement = document.getElementById('idea')
       if (textareaElement) {
         textareaElement.focus()
+      }
+    }, 100)
+  }
+
+  const handleEditIdea = () => {
+    // Return to input state with original idea text
+    setIsExpanded(false)
+    setIsCollapsing(false)
+
+    // Clear analysis states but keep original idea
+    setBreakdownData(null)
+    setCompetitorData(null)
+    setRefinedPreview('')
+    setPreviewError(null)
+    setPreviewLoading(false)
+    setIsRefinementCollapsing(false)
+    lastRefinedIdea.current = ''
+    setCompetitorError(null)
+    setShowVagueIdeaMessage(false)
+    setIsBreakdownVague(false)
+    setIdeaScore(null)
+    setIsCalculatingScore(false)
+    setRevealedCards([])
+    setCurrentSubtext(0)
+    setIsResetting(false)
+    setAnalysisDuration(null)
+
+    // Restore the original idea text
+    setIdea(originalIdea)
+
+    // Focus textarea after a short delay
+    setTimeout(() => {
+      const textareaElement = document.getElementById('idea') as HTMLTextAreaElement
+      if (textareaElement) {
+        textareaElement.focus()
+        // Position cursor at the end of the text
+        const textLength = originalIdea.length
+        textareaElement.setSelectionRange(textLength, textLength)
       }
     }, 100)
   }
@@ -498,12 +541,20 @@ const PLACEHOLDER_EXAMPLES = [
                 </p>
               )}
               
-              <button
-                onClick={handleReset}
-                className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 underline transition-all duration-300 hover:scale-105"
-              >
-                💡 Try a New Idea
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-4">
+                <button
+                  onClick={handleEditIdea}
+                  className="text-sm text-blue-400 hover:text-blue-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  ✏️ Edit Idea
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-indigo-400 hover:text-indigo-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  💡 Try a New Idea
+                </button>
+              </div>
             </div>
           </motion.div>
         ) : isExpanded && breakdownData && isBreakdownVague ? (
@@ -527,12 +578,20 @@ const PLACEHOLDER_EXAMPLES = [
               <p className="text-neutral-300 text-sm mb-2">Your idea seems too broad or unclear for a proper analysis.</p>
               <p className="text-neutral-400 text-xs mb-4">Try adding more details — what does it do or who is it for?</p>
               
-              <button
-                onClick={handleReset}
-                className="mt-4 text-sm text-amber-400 hover:text-amber-300 underline transition-all duration-300 hover:scale-105"
-              >
-                💡 Try a New Idea
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-4">
+                <button
+                  onClick={handleEditIdea}
+                  className="text-sm text-blue-400 hover:text-blue-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  ✏️ Edit Idea
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-amber-400 hover:text-amber-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  💡 Try a New Idea
+                </button>
+              </div>
             </div>
           </motion.div>
         ) : (
