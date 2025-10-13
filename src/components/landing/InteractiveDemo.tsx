@@ -45,6 +45,7 @@ interface InteractiveDemoProps {
 export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   // Idea state
   const [idea, setIdea] = useState('')
+  const [originalIdea, setOriginalIdea] = useState('') // Store original idea for editing
   
   // Guest session management
   const [guestSessionId, setGuestSessionId] = useState<string | null>(null)
@@ -99,6 +100,7 @@ const PLACEHOLDER_EXAMPLES = [
   const [currentSubtext, setCurrentSubtext] = useState(0)
   const [isResetting, setIsResetting] = useState(false)
   const [analysisDuration, setAnalysisDuration] = useState<number | null>(null)
+  const [isInputDisabled, setIsInputDisabled] = useState(false)
   
   
   // Competitor analysis state
@@ -272,11 +274,15 @@ const PLACEHOLDER_EXAMPLES = [
 
     console.log('🚀 handleRefineIdea running - this should not happen during reset!')
 
+    // Store the original idea for editing functionality
+    setOriginalIdea(idea.trim())
+
     // Use the refined preview if available, otherwise use the raw idea
     const ideaToAnalyze = refinedPreview.trim() || idea.trim()
 
     setBreakdownLoading(true)
     setIsExpanded(true)
+    setIsInputDisabled(true)
     
     // Start timing
     const startTime = Date.now()
@@ -329,6 +335,9 @@ const PLACEHOLDER_EXAMPLES = [
         } else {
           console.log('Competitor analysis not set:', { isVague, hasCompetitorAnalysis: !!data.idea.competitor_analysis })
         }
+        
+        // Re-enable input after analysis completes
+        setIsInputDisabled(false)
       } else {
         // Handle API error (like vague input rejection)
         console.log('Breakdown API error:', data.error)
@@ -342,6 +351,9 @@ const PLACEHOLDER_EXAMPLES = [
           monetization: 'Add more context for analysis',
           created_at: new Date().toISOString()
         })
+        
+        // Re-enable input after error
+        setIsInputDisabled(false)
       }
     } catch (error) {
       console.error('Breakdown analysis error:', error)
@@ -355,6 +367,9 @@ const PLACEHOLDER_EXAMPLES = [
         monetization: 'Ensure idea is clear and business-related',
         created_at: new Date().toISOString()
       })
+      
+      // Re-enable input after catch error
+      setIsInputDisabled(false)
     } finally {
       setBreakdownLoading(false)
     }
@@ -447,6 +462,8 @@ const PLACEHOLDER_EXAMPLES = [
     
     // Clear the idea state
     setIdea('')
+    setOriginalIdea('')
+    setIsInputDisabled(false)
     
     // Reset parent component
     onReset()
@@ -458,6 +475,34 @@ const PLACEHOLDER_EXAMPLES = [
         textareaElement.focus()
       }
     }, 100)
+  }
+
+  const handleEditIdea = () => {
+    // Return to input state with original idea text
+    setIsExpanded(false)
+    setIsCollapsing(false)
+
+    // Clear analysis states but keep original idea
+    setBreakdownData(null)
+    setCompetitorData(null)
+    setRefinedPreview('')
+    setPreviewError(null)
+    setPreviewLoading(false)
+    setIsRefinementCollapsing(false)
+    lastRefinedIdea.current = ''
+    setCompetitorError(null)
+    setShowVagueIdeaMessage(false)
+    setIsBreakdownVague(false)
+    setIdeaScore(null)
+    setIsCalculatingScore(false)
+    setRevealedCards([])
+    setCurrentSubtext(0)
+    setIsResetting(false)
+    setAnalysisDuration(null)
+
+    // Restore the original idea text
+    setIdea(originalIdea)
+    setIsInputDisabled(false)
   }
 
 
@@ -498,12 +543,20 @@ const PLACEHOLDER_EXAMPLES = [
                 </p>
               )}
               
-              <button
-                onClick={handleReset}
-                className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 underline transition-all duration-300 hover:scale-105"
-              >
-                💡 Try a New Idea
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-4">
+                <button
+                  onClick={handleEditIdea}
+                  className="text-sm text-blue-400 hover:text-blue-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  ✏️ Edit Idea
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-indigo-400 hover:text-indigo-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  💡 Try a New Idea
+                </button>
+              </div>
             </div>
           </motion.div>
         ) : isExpanded && breakdownData && isBreakdownVague ? (
@@ -527,12 +580,20 @@ const PLACEHOLDER_EXAMPLES = [
               <p className="text-neutral-300 text-sm mb-2">Your idea seems too broad or unclear for a proper analysis.</p>
               <p className="text-neutral-400 text-xs mb-4">Try adding more details — what does it do or who is it for?</p>
               
-              <button
-                onClick={handleReset}
-                className="mt-4 text-sm text-amber-400 hover:text-amber-300 underline transition-all duration-300 hover:scale-105"
-              >
-                💡 Try a New Idea
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mt-4">
+                <button
+                  onClick={handleEditIdea}
+                  className="text-sm text-blue-400 hover:text-blue-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  ✏️ Edit Idea
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="text-sm text-amber-400 hover:text-amber-300 underline transition-all duration-300 hover:scale-105"
+                >
+                  💡 Try a New Idea
+                </button>
+              </div>
             </div>
           </motion.div>
         ) : (
@@ -560,9 +621,10 @@ const PLACEHOLDER_EXAMPLES = [
                 }}
                 onPaste={handlePaste}
                 ref={textareaRef}
+                disabled={isInputDisabled}
                 className={`w-full resize-none rounded-2xl border border-neutral-800 focus:border-neutral-700 focus:ring-2 focus:ring-blue-600/40 outline-none p-6 text-base shadow-lg transition-all duration-700 hover:border-neutral-700 hover:shadow-xl relative ${
                   idea.trim() ? 'bg-neutral-900 text-white' : 'bg-transparent text-transparent'
-                }`}
+                } ${isInputDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 style={{
                   caretColor: idea.trim() ? 'white' : 'rgb(156, 163, 175)' // gray-400
                 }}
@@ -576,6 +638,15 @@ const PLACEHOLDER_EXAMPLES = [
                     isPlaceholderAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
                   } text-neutral-500`}>
                     {PLACEHOLDER_EXAMPLES[currentPlaceholderIndex]}
+                  </div>
+                </div>
+              )}
+              
+              {/* Analysis overlay - masks input during analysis */}
+              {isInputDisabled && (
+                <div className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mb-3"></div>
                   </div>
                 </div>
               )}
