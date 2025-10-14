@@ -28,6 +28,12 @@ interface IdeaBreakdown {
       competition_level?: number
       execution_difficulty?: number
     }
+    explanations?: {
+      business_viability?: string
+      market_timing?: string
+      competition_level?: string
+      execution_difficulty?: string
+    }
     top_risks?: Array<{
       title?: string
       severity?: string
@@ -59,6 +65,10 @@ export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   // Initialize guest session on component mount
   useEffect(() => {
     const initializeGuestSession = () => {
+      // Clean up legacy session IDs
+      localStorage.removeItem('vernaut-guest-session-id')
+      console.log('🧹 Cleaned up legacy session ID')
+      
       // Check if we already have a guest session
       let existingSessionId = localStorage.getItem('guest-session-id')
       
@@ -111,10 +121,123 @@ const PLACEHOLDER_EXAMPLES = [
   const [ideaScore, setIdeaScore] = useState<number | null>(null)
   const [isCalculatingScore, setIsCalculatingScore] = useState(false)
   const [shouldAnimateCTA, setShouldAnimateCTA] = useState(false)
+  const [showRiskGuide, setShowRiskGuide] = useState(false)
+  
+  // Progress bar state
+  const [progress, setProgress] = useState(0)
+  const [currentStage, setCurrentStage] = useState(0)
+  const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null)
+  const [currentTipIndex, setCurrentTipIndex] = useState(0)
+  
+  // All tips mixed and matched across phases
+  const allTips = [
+    // Validation & Research Tips
+    "💡 42% of startups fail by building something nobody wants. Validation first, building second.",
+    "🎯 The #1 mistake? Skipping customer research and jumping straight to code.",
+    "💰 Founders who validate before building save an average of $47K in wasted development.",
+    "⏱️ Speed beats perfection. Launch in 30 days, iterate based on real feedback.",
+    
+    // Behind-the-Scenes Tips
+    "🔍 Cross-referencing against 500+ startup patterns...",
+    "📊 Evaluating risk across 4 key dimensions: timing, competition, viability, execution...",
+    "💡 Analyzing demand signals in your target market...",
+    "⚡ Comparing against successful businesses in similar categories...",
+    
+    // Action-Oriented Tips
+    "📋 We're preparing your personalized 3-step action plan...",
+    "🎯 Identifying the fastest path to your first 10 customers...",
+    "💡 Pinpointing your most compelling value proposition...",
+    "🚀 Your custom roadmap is almost ready...",
+    
+    // Motivational Tips
+    "🎉 Every great company started exactly where you are right now.",
+    "🔥 You're already ahead of 90% who never validate.",
+    "💪 Clarity beats confusion. Real answers incoming...",
+    "⭐ Your idea deserves a fair shot. Let's see what we found...",
+    
+    // Execution Tips
+    "⚡ Launch fast. Learn faster.",
+    "💡 Ideas are cheap. Execution is everything.",
+    "🎯 Done beats perfect.",
+    "🚀 Ship it. Then ship it again.",
+    "💪 Build. Measure. Learn. Repeat.",
+    "🔥 Momentum beats motivation every time.",
+    
+    // Additional Mixed Tips
+    "🎨 The best ideas solve real problems for real people.",
+    "📈 Market timing can make or break even the best ideas.",
+    "🤝 Your first 10 customers are worth more than your next 1000.",
+    "💎 Differentiation is the key to standing out in crowded markets.",
+    "⚡ Fast feedback loops lead to faster success.",
+    "🎯 Focus beats feature creep every single time.",
+    "💡 Customer interviews reveal insights that surveys never will.",
+    "🚀 The best time to launch was yesterday. The second best is now."
+  ]
+
+  // Progress stages (40 seconds total)
+  const progressStages = [
+    { 
+      label: "🔍 Analyzing your business model...", 
+      duration: 10000, 
+      progress: 25
+    },
+    { 
+      label: "⚔️ Scanning competitive landscape...", 
+      duration: 10000, 
+      progress: 50
+    },
+    { 
+      label: "⚠️ Running risk analysis...", 
+      duration: 10000, 
+      progress: 75
+    },
+    { 
+      label: "🎉 Almost ready...", 
+      duration: 10000, 
+      progress: 100
+    }
+  ]
 
   // Simple static number display
   const AnimatedNumber = ({ value }: { value: number }) => {
     return <span>{value}</span>
+  }
+
+  // Progress bar logic
+  const startProgressBar = () => {
+    setProgress(0)
+    setCurrentStage(0)
+    setCurrentTipIndex(0)
+    
+    const interval = setInterval(() => {
+      setProgress(prev => {
+        const newProgress = prev + 0.5 // 0.5% every 200ms for smooth animation
+        const stageIndex = Math.floor(newProgress / 25)
+        
+        if (stageIndex !== currentStage && stageIndex < progressStages.length) {
+          setCurrentStage(stageIndex)
+          setCurrentTipIndex(0) // Reset tip index for new stage
+        }
+        
+        if (newProgress >= 100) {
+          // Don't clear interval - keep it running for Phase 5
+          return 100
+        }
+        
+        return newProgress
+      })
+    }, 200)
+    
+    setProgressInterval(interval)
+  }
+  
+  const stopProgressBar = () => {
+    if (progressInterval) {
+      clearInterval(progressInterval)
+      setProgressInterval(null)
+    }
+    setProgress(0)
+    setCurrentStage(0)
   }
 
   // Smooth scroll to competitor CTA
@@ -205,26 +328,12 @@ const PLACEHOLDER_EXAMPLES = [
 
     // Count words in the input
     const wordCount = idea.trim().split(/\s+/).filter(word => word.length > 0).length
-    
-    // Check if input ends with a word (not mid-sentence punctuation)
-    const endsWithWord = idea.trim().match(/\w$/) !== null
-    
-    // Don't refine if less than 6 words or doesn't end with a word
-    if (wordCount < 6 || !endsWithWord) {
-      // If we had content before and now we don't, trigger collapse animation
-      if (refinedPreview || previewLoading) {
-        setIsRefinementCollapsing(true)
-        setTimeout(() => {
-          setRefinedPreview('')
-          setPreviewError(null)
-          setPreviewLoading(false)
-          setIsRefinementCollapsing(false)
-        }, 300) // Match collapse animation duration
-      } else {
-        setRefinedPreview('')
-        setPreviewError(null)
-        setPreviewLoading(false)
-      }
+
+    // Start refining quickly, but avoid API calls until user has typed at least 2 words
+    if (wordCount < 2) {
+      // Do not call API yet; avoid flicker by not triggering collapse repeatedly
+      setPreviewError(null)
+      setPreviewLoading(false)
       return
     }
 
@@ -256,7 +365,7 @@ const PLACEHOLDER_EXAMPLES = [
       } finally {
         setPreviewLoading(false)
       }
-    }, 900) // 900ms debounce - natural pause detection
+    }, 600) // faster feedback while typing
 
     return () => {
       if (previewTimer.current) {
@@ -274,6 +383,9 @@ const PLACEHOLDER_EXAMPLES = [
 
     console.log('🚀 handleRefineIdea running - this should not happen during reset!')
 
+    // Close the refined preview when starting analysis
+    setIsRefinementCollapsing(true)
+
     // Store the original idea for editing functionality
     setOriginalIdea(idea.trim())
 
@@ -283,6 +395,15 @@ const PLACEHOLDER_EXAMPLES = [
     setBreakdownLoading(true)
     setIsExpanded(true)
     setIsInputDisabled(true)
+    
+    // Clear refined preview state after a short delay to allow collapse animation
+    setTimeout(() => {
+      setRefinedPreview('')
+      setPreviewError(null)
+      setPreviewLoading(false)
+      setIsRefinementCollapsing(false)
+      lastRefinedIdea.current = ''
+    }, 300) // Match the collapse animation duration
     
     // Start timing
     const startTime = Date.now()
@@ -354,6 +475,8 @@ const PLACEHOLDER_EXAMPLES = [
         
         // Re-enable input after error
         setIsInputDisabled(false)
+        // Ensure loading state is cleared for vague ideas
+        setBreakdownLoading(false)
       }
     } catch (error) {
       console.error('Breakdown analysis error:', error)
@@ -376,6 +499,31 @@ const PLACEHOLDER_EXAMPLES = [
   }
 
   // Competitor analysis is now included in the main API response
+
+  // Progress bar effect
+  useEffect(() => {
+    if (breakdownLoading) {
+      startProgressBar()
+    } else {
+      stopProgressBar()
+    }
+    
+    return () => {
+      stopProgressBar()
+    }
+  }, [breakdownLoading])
+
+  // Tip cycling effect - now uses mixed tips from all categories
+  useEffect(() => {
+    if (breakdownLoading) {
+      const isExtendedPhase = progress >= 100
+      const tipInterval = setInterval(() => {
+        setCurrentTipIndex(prev => (prev + 1) % allTips.length)
+      }, isExtendedPhase ? 2000 : 3000) // Faster cycling for Phase 5 (2s vs 3s)
+      
+      return () => clearInterval(tipInterval)
+    }
+  }, [breakdownLoading])
 
   // Progressive card reveal effect
   useEffect(() => {
@@ -507,7 +655,7 @@ const PLACEHOLDER_EXAMPLES = [
 
 
   return (
-    <div className="w-full">
+    <div className="w-full overflow-x-hidden">
       <AnimatePresence mode="wait">
         {isExpanded && breakdownData && !isBreakdownVague && (competitorData || showVagueIdeaMessage) ? (
           // Completion overlay
@@ -645,8 +793,45 @@ const PLACEHOLDER_EXAMPLES = [
               {/* Analysis overlay - masks input during analysis */}
               {isInputDisabled && (
                 <div className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mb-3"></div>
+                  <div className="text-center w-full max-w-sm px-6">
+                    {/* Progress Bar */}
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-neutral-300">
+                          {progressStages[currentStage]?.label || "Processing..."}
+                        </span>
+                        <span className="text-xs text-neutral-400">
+                          {Math.round(progress)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-neutral-700/50 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    {/* Stage indicator */}
+                    <div className="flex justify-center space-x-2 mb-3">
+                      {progressStages.map((stage, index) => (
+                        <div
+                          key={index}
+                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            index <= currentStage 
+                              ? 'bg-blue-500' 
+                              : 'bg-neutral-600'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    
+                    {/* Tips section */}
+                    <div className="mt-4 p-3 bg-neutral-800/50 rounded-lg border border-neutral-700/50">
+                      <div className="text-xs text-neutral-300 leading-relaxed transition-opacity duration-500">
+                        {allTips[currentTipIndex] || "Processing your idea..."}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -655,8 +840,8 @@ const PLACEHOLDER_EXAMPLES = [
         )}
       </AnimatePresence>
 
-      {/* Refined preview section - only show when there's content, loading, or collapsing */}
-      {idea.trim() && (previewLoading || previewError || refinedPreview || isRefinementCollapsing) && (
+      {/* Refined preview section - only show when there's content, loading, or collapsing, but hide during main analysis and when results are available */}
+      {idea.trim() && !breakdownLoading && !breakdownData && (previewLoading || previewError || refinedPreview || isRefinementCollapsing) && (
         <div className="mt-4">
           {/* Divider */}
           <div className="border-t border-neutral-700/50 mb-4"></div>
@@ -760,7 +945,7 @@ const PLACEHOLDER_EXAMPLES = [
 
       {/* Results section */}
       {(isExpanded || isCollapsing) && (
-        <div className={`mt-4 mb-8 p-6 bg-neutral-800/30 border border-neutral-600/50 rounded-xl backdrop-blur-sm transition-all duration-300 w-full max-w-none ${
+        <div className={`mt-4 mb-8 p-6 bg-neutral-800/30 border border-neutral-600/50 rounded-xl backdrop-blur-sm transition-all duration-300 w-full ${
           isCollapsing
             ? 'opacity-0 translate-y-2'
             : 'animate-[expandDown_0.6s_ease-out_forwards] opacity-0'
@@ -790,7 +975,7 @@ const PLACEHOLDER_EXAMPLES = [
                   <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></div>
                 </div>
                 <p className="text-xs text-neutral-500 mt-3">
-                  This usually takes ~5–10 seconds
+                  This usually takes less than ~30 seconds
                 </p>
               </div>
               
@@ -866,7 +1051,8 @@ const PLACEHOLDER_EXAMPLES = [
                         }`}>
                           <AnimatedNumber value={ideaScore!} />%
                         </span>
-                        {breakdownData?.ai_insights?.tier && (
+                        {/* AI Insights tier display - COMMENTED OUT FOR DEMO */}
+                        {/* {breakdownData?.ai_insights?.tier && (
                           <>
                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                               breakdownData.ai_insights.tier === 'weak' ? 'bg-red-500/15 text-red-300 border border-red-500/30' :
@@ -876,13 +1062,21 @@ const PLACEHOLDER_EXAMPLES = [
                               'bg-neutral-500/15 text-neutral-300 border border-neutral-500/30'
                             }`}>
                               {breakdownData.ai_insights.tier === 'weak' ? 'Weak' :
-                               breakdownData.ai_insights.tier === 'average' ? 'Strong' :
+                               breakdownData.ai_insights.tier === 'average' ? 'Average' :
                                breakdownData.ai_insights.tier === 'good' ? 'Good' :
                                breakdownData.ai_insights.tier === 'exceptional' ? 'Exceptional' :
                                'Unknown'}
                             </span>
                           </>
-                        )}
+                        )} */}
+                      </div>
+                      {/* Risk-adjusted explanation subtext */}
+                      <div className="text-xs text-neutral-400 mb-2">
+                        {ideaScore! >= 85 && 'Exceptional — clear edge, strong pull, solid viability.'}
+                        {ideaScore! >= 70 && ideaScore! < 85 && 'Strong — distinct value and good timing; validate pricing and GTM.'}
+                        {ideaScore! >= 55 && ideaScore! < 70 && 'Promising — focus the niche and sharpen differentiation.'}
+                        {ideaScore! >= 40 && ideaScore! < 55 && 'Needs Focus — crowded or hard to monetize; narrow scope and prove value.'}
+                        {ideaScore! < 40 && 'Early — high uncertainty or risk; validate problem and audience fit first.'}
                       </div>
                       
                       {/* Progress bar */}
@@ -907,16 +1101,7 @@ const PLACEHOLDER_EXAMPLES = [
                         ></div>
                       </div>
                       
-                      <p className="text-xs text-neutral-400 animate-[fadeInUp_0.5s_ease-out_forwards]">
-                        {ideaScore! > 85 
-                          ? "🌟 Exceptional clarity and vision — this idea could stand out to investors."
-                          : ideaScore! > 70 
-                          ? "💼 Strong, well-rounded concept — solid foundation for an MVP or pitch deck."
-                          : ideaScore! > 55 
-                          ? "✍️ Good starting point — refine your problem and audience focus for sharper impact."
-                          : "🧠 The idea feels a bit unclear — expand on what it solves and who it's for."
-                        }
-                      </p>
+                      {/* Removed secondary message to avoid duplicate copy; risk-adjusted subtext above replaces this. */}
                     </>
                   )}
                 </div>
@@ -930,33 +1115,33 @@ const PLACEHOLDER_EXAMPLES = [
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="p-4 bg-gradient-to-br from-blue-900/20 to-blue-800/10 rounded-lg border border-blue-500/30 animate-[slideUpStagger_0.6s_ease-out_0s_forwards] opacity-0 flex flex-col min-h-[140px]">
-                  <h3 className="text-sm font-semibold text-blue-400 mb-3 flex items-center gap-2">
+                <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-900/20 to-blue-800/10 rounded-lg border border-blue-500/30 animate-[slideUpStagger_0.6s_ease-out_0s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-xs sm:text-sm font-semibold text-blue-400 mb-2 sm:mb-3 flex items-center gap-2">
                     <span>🎯</span>
                     <span>Problem</span>
                   </h3>
-                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.problem}</p>
+                  <p className="text-neutral-300 text-xs sm:text-sm leading-relaxed break-words">{breakdownData.problem}</p>
                 </div>
-                <div className="p-4 bg-gradient-to-br from-green-900/20 to-green-800/10 rounded-lg border border-green-500/30 animate-[slideUpStagger_0.6s_ease-out_0.2s_forwards] opacity-0 flex flex-col min-h-[140px]">
-                  <h3 className="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
+                <div className="p-3 sm:p-4 bg-gradient-to-br from-green-900/20 to-green-800/10 rounded-lg border border-green-500/30 animate-[slideUpStagger_0.6s_ease-out_0.2s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-xs sm:text-sm font-semibold text-green-400 mb-2 sm:mb-3 flex items-center gap-2">
                     <span>👥</span>
                     <span>Audience</span>
                   </h3>
-                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.audience}</p>
+                  <p className="text-neutral-300 text-xs sm:text-sm leading-relaxed break-words">{breakdownData.audience}</p>
                 </div>
-                <div className="p-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-lg border border-purple-500/30 animate-[slideUpStagger_0.6s_ease-out_0.4s_forwards] opacity-0 flex flex-col min-h-[140px]">
-                  <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                <div className="p-3 sm:p-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-lg border border-purple-500/30 animate-[slideUpStagger_0.6s_ease-out_0.4s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-xs sm:text-sm font-semibold text-purple-400 mb-2 sm:mb-3 flex items-center gap-2">
                     <span>💡</span>
                     <span>Solution</span>
                   </h3>
-                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.solution}</p>
+                  <p className="text-neutral-300 text-xs sm:text-sm leading-relaxed break-words">{breakdownData.solution}</p>
                 </div>
-                <div className="p-4 bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 rounded-lg border border-yellow-500/30 animate-[slideUpStagger_0.6s_ease-out_0.6s_forwards] opacity-0 flex flex-col min-h-[140px]">
-                  <h3 className="text-sm font-semibold text-yellow-400 mb-3 flex items-center gap-2">
+                <div className="p-3 sm:p-4 bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 rounded-lg border border-yellow-500/30 animate-[slideUpStagger_0.6s_ease-out_0.6s_forwards] opacity-0 flex flex-col min-h-[140px]">
+                  <h3 className="text-xs sm:text-sm font-semibold text-yellow-400 mb-2 sm:mb-3 flex items-center gap-2">
                     <span>💰</span>
                     <span>Monetization</span>
                   </h3>
-                  <p className="text-neutral-300 text-sm leading-relaxed flex-1">{breakdownData.monetization}</p>
+                  <p className="text-neutral-300 text-xs sm:text-sm leading-relaxed break-words">{breakdownData.monetization}</p>
                 </div>
               </div>
               
@@ -970,11 +1155,120 @@ const PLACEHOLDER_EXAMPLES = [
         <div className="mt-12 mb-8">
           <div className="p-6 bg-gradient-to-br from-amber-900/20 to-orange-900/20 border border-amber-500/30 rounded-xl backdrop-blur-sm shadow-lg">
             {/* Risk Assessment Header */}
-            <div className="text-center mb-6">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <span className="text-2xl">⚠️</span>
-                <h3 className="text-xl font-semibold text-amber-200">Risk Assessment</h3>
+            <div className="mb-6">
+              <div className="flex items-center justify-center mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">⚠️</span>
+                  <h3 className="text-xl font-semibold text-amber-200">Risk Assessment</h3>
+                </div>
               </div>
+              
+              <div className="flex justify-center mb-4">
+                <button
+                  onClick={() => setShowRiskGuide(!showRiskGuide)}
+                  className="flex items-center gap-2 text-sm text-amber-300/80 hover:text-amber-200 transition-colors"
+                >
+                  <span className="hidden sm:inline">
+                    {showRiskGuide ? 'Hide guide' : 'What do these mean?'}
+                  </span>
+                  <span className="sm:hidden">
+                    {showRiskGuide ? 'Hide' : 'Guide'}
+                  </span>
+                  {showRiskGuide ? (
+                    <span className="text-xs">▲</span>
+                  ) : (
+                    <span className="text-xs">▼</span>
+                  )}
+                </button>
+              </div>
+              
+              {/* Expandable guide */}
+              {showRiskGuide && (
+                <div className="mb-6 p-4 bg-neutral-800/50 rounded-lg border border-neutral-600/30">
+                  <p className="text-sm text-neutral-300 mb-4">
+                    We evaluate your idea across 4 key dimensions:
+                  </p>
+                  
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <div className="font-medium text-amber-200 flex items-center gap-2">
+                        <span>📊</span>
+                        <span>Market Timing</span>
+                      </div>
+                      <div className="text-neutral-400 ml-6">
+                        Is now the right time for this idea?
+                      </div>
+                      <div className="text-xs text-neutral-500 ml-6">
+                        Lower = Better timing
+                      </div>
+                    </div>
+                    
+                    {/* Visual separator */}
+                    <div className="border-t border-neutral-600/30 pt-4">
+                      <div className="font-medium text-amber-200 flex items-center gap-2">
+                        <span>⚔️</span>
+                        <span>Competition</span>
+                      </div>
+                      <div className="text-neutral-400 ml-6">
+                        How crowded is the market?
+                      </div>
+                      <div className="text-xs text-neutral-500 ml-6">
+                        Lower = Less competition
+                      </div>
+                    </div>
+                    
+                    {/* Visual separator */}
+                    <div className="border-t border-neutral-600/30 pt-4">
+                      <div className="font-medium text-amber-200 flex items-center gap-2">
+                        <span>💼</span>
+                        <span>Business Viability</span>
+                      </div>
+                      <div className="text-neutral-400 ml-6">
+                        How hard is it to monetize?
+                      </div>
+                      <div className="text-xs text-neutral-500 ml-6">
+                        Lower = Easier to make money
+                      </div>
+                    </div>
+                    
+                    {/* Visual separator */}
+                    <div className="border-t border-neutral-600/30 pt-4">
+                      <div className="font-medium text-amber-200 flex items-center gap-2">
+                        <span>📊</span>
+                        <span>Execution</span>
+                      </div>
+                      <div className="text-neutral-400 ml-6">
+                        How difficult is it to build?
+                      </div>
+                      <div className="text-xs text-neutral-500 ml-6">
+                        Lower = Easier to execute
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t border-neutral-600/30 text-xs text-neutral-400">
+                    <div className="font-medium text-neutral-300 mb-2">Overall Risk: Weighted average</div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span>Competition:</span>
+                        <span>35%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Viability:</span>
+                        <span>25%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Timing:</span>
+                        <span>20%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Execution:</span>
+                        <span>20%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {breakdownLoading ? (
                 <div className="mb-6">
@@ -989,7 +1283,7 @@ const PLACEHOLDER_EXAMPLES = [
                 </div>
               ) : (
                 /* Overall Risk Score */
-                <div className="mb-6">
+                <div className="mb-6 text-center">
                   <div className="text-3xl font-bold text-amber-300 mb-2">
                     {breakdownData?.risk_analysis?.overall_score}/10
                   </div>
@@ -1009,13 +1303,21 @@ const PLACEHOLDER_EXAMPLES = [
             {breakdownLoading ? (
               <div className="space-y-4 mb-6">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="space-y-2">
+                  <div key={i} className="space-y-3">
                     <div className="flex justify-between items-center">
                       <div className="h-4 bg-amber-800/30 rounded w-32 animate-pulse" style={{ animationDuration: '2s' }}></div>
                       <div className="h-4 bg-amber-800/30 rounded w-12 animate-pulse" style={{ animationDuration: '2s' }}></div>
                     </div>
                     <div className="w-full bg-neutral-700/50 rounded-full h-2">
                       <div className="bg-amber-800/30 h-2 rounded-full animate-pulse" style={{ width: `${Math.random() * 60 + 20}%`, animationDuration: '2s' }}></div>
+                    </div>
+                    {/* Loading explanation placeholder */}
+                    <div className="mt-2 p-3 bg-neutral-800/30 border border-neutral-600/20 rounded-lg">
+                      <div className="space-y-1">
+                        <div className="h-3 bg-neutral-700/50 rounded w-full animate-pulse" style={{ animationDuration: '2s' }}></div>
+                        <div className="h-3 bg-neutral-700/50 rounded w-4/5 animate-pulse" style={{ animationDuration: '2s' }}></div>
+                        <div className="h-3 bg-neutral-700/50 rounded w-3/5 animate-pulse" style={{ animationDuration: '2s' }}></div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1048,7 +1350,7 @@ const PLACEHOLDER_EXAMPLES = [
                 }
                 
                 return (
-                  <div key={category} className="space-y-2">
+                  <div key={category} className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium text-amber-200">
                         {categoryNames[category as keyof typeof categoryNames] || category}
@@ -1061,6 +1363,14 @@ const PLACEHOLDER_EXAMPLES = [
                         style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
+                    {/* Risk Explanation */}
+                    {breakdownData?.risk_analysis?.explanations?.[category as keyof typeof breakdownData.risk_analysis.explanations] && (
+                      <div className="mt-2 p-3 bg-neutral-800/30 border border-neutral-600/20 rounded-lg">
+                        <p className="text-xs text-neutral-300 leading-relaxed">
+                          {breakdownData.risk_analysis.explanations[category as keyof typeof breakdownData.risk_analysis.explanations]}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -1070,38 +1380,28 @@ const PLACEHOLDER_EXAMPLES = [
             {/* Top 3 Critical Risks - Blurred Teaser */}
             {!breakdownLoading && (
             <div className="mb-6">
-              <h4 className="text-lg font-semibold text-amber-200 mb-4 flex items-center gap-2">
+              <h4 className="text-lg font-semibold text-amber-200 mb-4 flex items-center justify-center gap-2">
                 <span>🚨</span>
                 <span>Top 3 Critical Risks</span>
               </h4>
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
-                {breakdownData?.risk_analysis?.top_risks?.slice(0, 3).map((risk, index) => (
-                  <div key={index} className="relative">
-                    <div className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="relative">
+                    <div className="p-3 sm:p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg blur-sm">
                       <div className="space-y-2">
-                        <div className="h-4 bg-neutral-700 rounded w-3/4 font-medium text-neutral-300">
-                          {risk.title}
+                        <div className="h-4 bg-neutral-700 rounded w-3/4"></div>
+                        <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                          <div className="h-5 bg-red-500/20 rounded w-16"></div>
+                          <div className="h-5 bg-orange-500/20 rounded w-20"></div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs px-2 py-1 bg-red-500/20 text-red-300 rounded">
-                            {risk.severity} Severity
-                          </span>
-                          <span className="text-xs px-2 py-1 bg-orange-500/20 text-orange-300 rounded">
-                            {risk.likelihood} Likelihood
-                          </span>
-                        </div>
-                        <div className="h-3 bg-neutral-700 rounded w-full text-xs text-neutral-400">
-                          {risk.description}
-                        </div>
-                        <div className="h-3 bg-neutral-700 rounded w-2/3 text-xs text-neutral-400">
-                          {risk.mitigation}
-                        </div>
+                        <div className="h-3 bg-neutral-700 rounded w-full"></div>
+                        <div className="h-3 bg-neutral-700 rounded w-2/3"></div>
                       </div>
                     </div>
-                    {/* Lock icon positioned in middle, not blurred */}
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-neutral-500 bg-neutral-900/90 px-3 py-2 rounded-lg shadow-lg">
-                      <span className="text-xl">🔒</span>
-                      <span className="text-sm font-medium">Locked</span>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="bg-neutral-900/80 rounded-full p-2">
+                        <span className="text-2xl">🔒</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1127,10 +1427,9 @@ const PLACEHOLDER_EXAMPLES = [
         </div>
       )}
 
-      {/* AI Insights Section - Prominent and integrated */}
-      {(breakdownData || breakdownLoading) && (
+      {/* AI Insights Section - COMMENTED OUT FOR DEMO */}
+      {/* {(breakdownData || breakdownLoading) && !isBreakdownVague && (
         <>
-          {/* Visual connector */}
           <div className="mt-6 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-full border border-indigo-500/30 text-sm text-indigo-300">
               <span>✨</span>
@@ -1140,143 +1439,135 @@ const PLACEHOLDER_EXAMPLES = [
           </div>
           
           <div className="mt-4 p-6 bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl backdrop-blur-sm shadow-lg">
-          {/* AI Insights Header - More prominent */}
-          <div className="text-center mb-6">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <span className="text-2xl">🧠</span>
-              <h3 className="text-xl font-semibold text-white">AI Insights</h3>
-            </div>
-            {breakdownData?.ai_insights ? (
-              <div className="text-sm text-neutral-300 leading-relaxed max-w-2xl mx-auto">
-                {breakdownData.ai_insights.ai_verdict}
+            <div className="text-center mb-6">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <span className="text-2xl">🧠</span>
+                <h3 className="text-xl font-semibold text-white">AI Insights</h3>
               </div>
-            ) : (
-              <div className="flex items-center justify-center gap-3">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              {breakdownData?.ai_insights ? (
+                <div className="text-sm text-neutral-300 leading-relaxed max-w-2xl mx-auto">
+                  {breakdownData.ai_insights.ai_verdict}
                 </div>
-                <span className="text-sm text-neutral-400">Generating insights...</span>
-              </div>
-            )}
-          </div>
-          
-          {/* Detailed insights - hierarchical layout */}
-          {breakdownData?.ai_insights ? (
-            <div className="space-y-6">
-              {/* Action Plan - Most prominent (primary) */}
-              {breakdownData.ai_insights.recommendation && (
-              <div className="p-6 bg-gradient-to-br from-purple-900/30 to-indigo-900/30 rounded-xl border-2 border-purple-400/40 shadow-lg">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-purple-500/20 rounded-lg">
-                    <span className="text-lg">📋</span>
+              ) : (
+                <div className="flex items-center justify-center gap-3">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                   </div>
-                  <h4 className="text-lg font-semibold text-purple-200">Action Plan</h4>
+                  <span className="text-sm text-neutral-400">Generating insights...</span>
                 </div>
-                <div className="text-base text-neutral-200 leading-relaxed">
-                  {breakdownData.ai_insights.recommendation?.split('Step ').map((step, index) => {
-                    if (index === 0) return step; // First part before any "Step"
-                    // Remove the number from the step text since we're adding it as a visual element
-                    const stepText = step.replace(/^\d+:\s*/, '');
-                    return (
-                      <div key={index} className="mt-3 flex items-start gap-3">
-                        <div className="flex-shrink-0 w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-xs font-semibold text-purple-300">
-                          {index}
-                        </div>
-                        <div className="flex-1">{stepText}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
             
-            {/* Secondary insights - side by side */}
-            <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
-              {/* Strengths */}
-              {breakdownData.ai_insights.strengths && breakdownData.ai_insights.strengths.length > 0 && (
-                <div className="p-4 bg-green-900/20 rounded-lg border border-green-400/30">
-                  <h4 className="text-sm font-semibold text-green-300 mb-3 flex items-center gap-2">
-                    <span>Strengths</span>
-                    <span className="text-xs">💪</span>
-                  </h4>
-                  <ul className="space-y-2">
-                    {breakdownData.ai_insights.strengths.map((strength, index) => (
-                      <li key={index} className="text-sm text-neutral-300 flex items-start gap-2">
-                        <span className="text-green-400 mt-1 flex-shrink-0">•</span>
-                        <span className="leading-relaxed">{strength}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
-              {/* Challenges */}
-              {breakdownData.ai_insights.challenges && breakdownData.ai_insights.challenges.length > 0 && (
-                <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-400/30">
-                  <h4 className="text-sm font-semibold text-yellow-300 mb-3 flex items-center gap-2">
-                    <span>Challenges</span>
-                    <span className="text-xs">⚠️</span>
-                  </h4>
-                  <ul className="space-y-2">
-                    {breakdownData.ai_insights.challenges.map((challenge, index) => (
-                      <li key={index} className="text-sm text-neutral-300 flex items-start gap-2">
-                        <span className="text-yellow-400 mt-1 flex-shrink-0">•</span>
-                        <span className="leading-relaxed">{challenge}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-          ) : (
-            /* AI Insights Loading State */
-            <div className="space-y-4">
-              <div className="p-6 bg-gradient-to-br from-purple-900/20 to-indigo-900/20 rounded-xl border border-purple-500/30">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-purple-500/20 rounded-lg">
-                    <div className="w-6 h-6 bg-purple-400/30 rounded animate-pulse"></div>
+            {breakdownData?.ai_insights ? (
+              <div className="space-y-6">
+                {breakdownData.ai_insights.recommendation && (
+                <div className="p-6 bg-gradient-to-br from-purple-900/30 to-indigo-900/30 rounded-xl border-2 border-purple-400/40 shadow-lg">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <span className="text-lg">📋</span>
+                    </div>
+                    <h4 className="text-lg font-semibold text-purple-200">Action Plan</h4>
                   </div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-purple-400/30 rounded w-24 mb-2 animate-pulse"></div>
-                    <div className="h-3 bg-neutral-600/50 rounded w-full animate-pulse"></div>
-                    <div className="h-3 bg-neutral-600/50 rounded w-3/4 mt-2 animate-pulse"></div>
+                  <div className="text-base text-neutral-200 leading-relaxed">
+                    {breakdownData.ai_insights.recommendation?.split('Step ').map((step, index) => {
+                      if (index === 0) return step;
+                      const stepText = step.replace(new RegExp('^\\d+:\\s*'), '');
+                      return (
+                        <div key={index} className="mt-3 flex items-start gap-3">
+                          <div className="flex-shrink-0 w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-xs font-semibold text-purple-300">
+                            {index}
+                          </div>
+                          <div className="flex-1">{stepText}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
+              )}
               
               <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
-                <div className="p-4 bg-green-900/20 rounded-lg border border-green-400/30">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 bg-green-400/30 rounded animate-pulse"></div>
-                    <div className="h-4 bg-green-400/30 rounded w-16 animate-pulse"></div>
+                {breakdownData.ai_insights.strengths && breakdownData.ai_insights.strengths.length > 0 && (
+                  <div className="p-4 bg-green-900/20 rounded-lg border border-green-400/30">
+                    <h4 className="text-sm font-semibold text-green-300 mb-3 flex items-center gap-2">
+                      <span>Strengths</span>
+                      <span className="text-xs">💪</span>
+                    </h4>
+                    <ul className="space-y-2">
+                      {breakdownData.ai_insights.strengths.map((strength, index) => (
+                        <li key={index} className="text-sm text-neutral-300 flex items-start gap-2">
+                          <span className="text-green-400 mt-1 flex-shrink-0">•</span>
+                          <span className="leading-relaxed">{strength}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-neutral-600/50 rounded animate-pulse"></div>
-                    <div className="h-3 bg-neutral-600/50 rounded w-4/5 animate-pulse"></div>
-                    <div className="h-3 bg-neutral-600/50 rounded w-2/3 animate-pulse"></div>
+                )}
+                
+                {breakdownData.ai_insights.challenges && breakdownData.ai_insights.challenges.length > 0 && (
+                  <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-400/30">
+                    <h4 className="text-sm font-semibold text-yellow-300 mb-3 flex items-center gap-2">
+                      <span>Challenges</span>
+                      <span className="text-xs">⚠️</span>
+                    </h4>
+                    <ul className="space-y-2">
+                      {breakdownData.ai_insights.challenges.map((challenge, index) => (
+                        <li key={index} className="text-sm text-neutral-300 flex items-start gap-2">
+                          <span className="text-yellow-400 mt-1 flex-shrink-0">•</span>
+                          <span className="leading-relaxed">{challenge}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-6 bg-gradient-to-br from-purple-900/20 to-indigo-900/20 rounded-xl border border-purple-500/30">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <div className="w-6 h-6 bg-purple-400/30 rounded animate-pulse"></div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-purple-400/30 rounded w-24 mb-2 animate-pulse"></div>
+                      <div className="h-3 bg-neutral-600/50 rounded w-full animate-pulse"></div>
+                      <div className="h-3 bg-neutral-600/50 rounded w-3/4 mt-2 animate-pulse"></div>
+                    </div>
                   </div>
                 </div>
                 
-                <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-400/30">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 bg-yellow-400/30 rounded animate-pulse"></div>
-                    <div className="h-4 bg-yellow-400/30 rounded w-20 animate-pulse"></div>
+                <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
+                  <div className="p-4 bg-green-900/20 rounded-lg border border-green-400/30">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-green-400/30 rounded animate-pulse"></div>
+                      <div className="h-4 bg-green-400/30 rounded w-16 animate-pulse"></div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-neutral-600/50 rounded animate-pulse"></div>
+                      <div className="h-3 bg-neutral-600/50 rounded w-4/5 animate-pulse"></div>
+                      <div className="h-3 bg-neutral-600/50 rounded w-2/3 animate-pulse"></div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-neutral-600/50 rounded animate-pulse"></div>
-                    <div className="h-3 bg-neutral-600/50 rounded w-3/4 animate-pulse"></div>
-                    <div className="h-3 bg-neutral-600/50 rounded w-1/2 animate-pulse"></div>
+                  
+                  <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-400/30">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-yellow-400/30 rounded animate-pulse"></div>
+                      <div className="h-4 bg-yellow-400/30 rounded w-20 animate-pulse"></div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-neutral-600/50 rounded animate-pulse"></div>
+                      <div className="h-3 bg-neutral-600/50 rounded w-3/4 animate-pulse"></div>
+                      <div className="h-3 bg-neutral-600/50 rounded w-1/2 animate-pulse"></div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
         </>
-      )}
+      )} */}
 
       {/* Competitor Landscape Section - Now positioned outside results container for better mobile layout */}
       {(breakdownLoading || competitorData || competitorError || showVagueIdeaMessage) && (
@@ -1324,7 +1615,7 @@ const PLACEHOLDER_EXAMPLES = [
           </div>
 
           {/* Competitor cards */}
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full max-w-none">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6 w-full">
             {breakdownLoading ? (
               [1, 2, 3].map((i) => (
                 <div key={i} className="p-4 bg-neutral-800/50 border border-neutral-600/30 rounded-lg">
