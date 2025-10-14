@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { supabase } from '@/lib/supabase'
 
 // Input validation schema
 const requestSchema = z.object({
@@ -134,18 +133,20 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${ideas?.length || 0} ideas for user`)
 
     // Step 4: Transform data to handle nullable fields
-    const transformedIdeas = (ideas || []).map((idea: any) => {
+    const transformedIdeas = (ideas || []).map((idea: Record<string, unknown>) => {
       // Extract risk_level from the full JSONB object
-      const jsonbRiskLevel = idea.risk_analysis?.risk_level
-      const calculatedRiskLevel = idea.risk_score <= 3.9 ? 'Low' : idea.risk_score <= 6.9 ? 'Medium' : 'High'
+      const riskAnalysis = idea.risk_analysis as Record<string, unknown> || {}
+      const jsonbRiskLevel = riskAnalysis.risk_level
+      const riskScore = idea.risk_score as number || 0
+      const calculatedRiskLevel = riskScore <= 3.9 ? 'Low' : riskScore <= 6.9 ? 'Medium' : 'High'
       const finalRiskLevel = jsonbRiskLevel || calculatedRiskLevel
       
       
       return {
         id: idea.id,
-        idea_text: idea.idea_text,
+        idea_text: idea.idea_text as string,
         // Use title if available, fallback to truncated idea_text
-        title: idea.title || (idea.idea_text.length > 60 ? idea.idea_text.substring(0, 60) + '...' : idea.idea_text),
+        title: idea.title || ((idea.idea_text as string).length > 60 ? (idea.idea_text as string).substring(0, 60) + '...' : idea.idea_text as string),
         score: idea.score,
         risk_score: idea.risk_score,
         // Use risk_level from JSONB, fallback to calculation if null

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface IdeaBreakdown {
@@ -204,7 +204,7 @@ const PLACEHOLDER_EXAMPLES = [
   }
 
   // Progress bar logic
-  const startProgressBar = () => {
+  const startProgressBar = useCallback(() => {
     setProgress(0)
     setCurrentStage(0)
     setCurrentTipIndex(0)
@@ -229,16 +229,16 @@ const PLACEHOLDER_EXAMPLES = [
     }, 200)
     
     setProgressInterval(interval)
-  }
+  }, [currentStage, progressStages.length])
   
-  const stopProgressBar = () => {
+  const stopProgressBar = useCallback(() => {
     if (progressInterval) {
       clearInterval(progressInterval)
       setProgressInterval(null)
     }
     setProgress(0)
     setCurrentStage(0)
-  }
+  }, [progressInterval])
 
   // Smooth scroll to competitor CTA
   const scrollToCompetitorCTA = () => {
@@ -511,7 +511,7 @@ const PLACEHOLDER_EXAMPLES = [
     return () => {
       stopProgressBar()
     }
-  }, [breakdownLoading])
+  }, [breakdownLoading, startProgressBar, stopProgressBar])
 
   // Tip cycling effect - now uses mixed tips from all categories
   useEffect(() => {
@@ -523,7 +523,7 @@ const PLACEHOLDER_EXAMPLES = [
       
       return () => clearInterval(tipInterval)
     }
-  }, [breakdownLoading])
+  }, [breakdownLoading, allTips.length, progress])
 
   // Progressive card reveal effect
   useEffect(() => {

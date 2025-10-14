@@ -274,7 +274,7 @@ Analyze this idea: "${idea}"`
         cleanResponse = jsonMatch[0]
       }
       
-      let parsedResponse: any
+      let parsedResponse: Record<string, unknown>
       try {
         parsedResponse = JSON.parse(cleanResponse)
       } catch (error) {
@@ -611,7 +611,7 @@ Monetization: ${validatedResponse.monetization}
       combinedText = jsonMatch[0]
     }
     
-    let analysis: any
+    let analysis: Record<string, unknown>
     try {
       analysis = JSON.parse(combinedText)
     } catch (error) {
@@ -647,26 +647,26 @@ Monetization: ${validatedResponse.monetization}
 
     // Extract insights, risk analysis, and competitor analysis with same structure as before
     // const insights = analysis.ai_insights || {} // COMMENTED OUT FOR DEMO
-    const riskAnalysis = analysis.risk_analysis || {}
-    const competitorAnalysis = analysis.competitor_analysis || {}
+    const riskAnalysis = (analysis.risk_analysis as Record<string, unknown>) || {}
+    const competitorAnalysis = (analysis.competitor_analysis as Record<string, unknown>) || {}
 
     // Validate and set defaults if AI response is incomplete
     const safeRiskAnalysis = {
-      overall_score: riskAnalysis.overall_score || 5.0,
+      overall_score: (riskAnalysis.overall_score as number) || 5.0,
       category_scores: {
-        business_viability: riskAnalysis.category_scores?.business_viability || 5.0,
-        market_timing: riskAnalysis.category_scores?.market_timing || 5.0,
-        competition_level: riskAnalysis.category_scores?.competition_level || 5.0,
-        execution_difficulty: riskAnalysis.category_scores?.execution_difficulty || 5.0,
+        business_viability: ((riskAnalysis.category_scores as Record<string, unknown>)?.business_viability as number) || 5.0,
+        market_timing: ((riskAnalysis.category_scores as Record<string, unknown>)?.market_timing as number) || 5.0,
+        competition_level: ((riskAnalysis.category_scores as Record<string, unknown>)?.competition_level as number) || 5.0,
+        execution_difficulty: ((riskAnalysis.category_scores as Record<string, unknown>)?.execution_difficulty as number) || 5.0,
       },
-      explanations: riskAnalysis.explanations || {
+      explanations: (riskAnalysis.explanations as Record<string, string>) || {
         business_viability: "Analysis pending - please try again",
         market_timing: "Analysis pending - please try again", 
         competition_level: "Analysis pending - please try again",
         execution_difficulty: "Analysis pending - please try again"
       },
-      risk_level: riskAnalysis.risk_level || 'Medium',
-      top_risks: riskAnalysis.top_risks || [],
+      risk_level: (riskAnalysis.risk_level as string) || 'Medium',
+      top_risks: (riskAnalysis.top_risks as unknown[]) || [],
     }
 
     // Quality control for risk assessment scoring
@@ -724,15 +724,15 @@ Monetization: ${validatedResponse.monetization}
           return Math.sqrt(arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length)
         }
 
-        const calculateDemoScore = (subscores: any, riskScore: number) => {
+        const calculateDemoScore = (subscores: Record<string, unknown>, riskScore: number) => {
           // Get subscores with better defaults
-          const d = subscores.differentiation?.score ?? 6
-          const m = subscores.market_pull?.score ?? 6
-          const mv = subscores.monetization_viability?.score ?? 6
-          const f = subscores.feasibility_lite?.score ?? 6
+          const d = ((subscores.differentiation as Record<string, unknown>)?.score as number) ?? 6
+          const m = ((subscores.market_pull as Record<string, unknown>)?.score as number) ?? 6
+          const mv = ((subscores.monetization_viability as Record<string, unknown>)?.score as number) ?? 6
+          const f = ((subscores.feasibility_lite as Record<string, unknown>)?.score as number) ?? 6
           
           // Variance floor
-          let scores = [d, m, mv, f]
+          const scores = [d, m, mv, f]
           const stdev = calculateStdDev(scores)
           
           if (stdev < 1.5) {
