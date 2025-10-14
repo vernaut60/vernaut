@@ -113,10 +113,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('✅ Successfully transferred guest ideas:', result.ideas_transferred)
         // Clear the guest session ID after successful transfer
         localStorage.removeItem('guest-session-id')
+        // Clean up any legacy session IDs
+        localStorage.removeItem('vernaut-guest-session-id')
+        // Emit event to notify dashboard that handoff completed
+        window.dispatchEvent(new CustomEvent('handoff-complete'))
       } else {
         console.log('ℹ️ Handoff skipped:', result.message)
         // Still clear the session ID to avoid repeated attempts
         localStorage.removeItem('guest-session-id')
+        // Clean up any legacy session IDs
+        localStorage.removeItem('vernaut-guest-session-id')
+        // Emit event even if no transfer (handoff process completed)
+        window.dispatchEvent(new CustomEvent('handoff-complete'))
       }
     } catch (error) {
       console.error('❌ Error during guest idea handoff:', error)

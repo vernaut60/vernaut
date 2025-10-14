@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 // Rate limiting configuration
@@ -157,35 +157,47 @@ export async function POST(request: NextRequest) {
     const rawIdea = validatedInput.idea.trim();
 
     // Step 5: Environment validation
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      logError('error', 'Missing OpenAI API key', { clientIp });
+      logError('error', 'Missing Anthropic API key', { clientIp });
       return NextResponse.json(
-        { success: false, error: "Server misconfiguration: missing OPENAI_API_KEY." },
+        { success: false, error: "Server misconfiguration: missing ANTHROPIC_API_KEY." },
         { status: 500 }
       );
     }
 
-    // Step 6: OpenAI API call with retry logic
-    const client = new OpenAI({ apiKey });
+    // Step 6: Anthropic API call with retry logic
+    const client = new Anthropic({ apiKey });
     let refinedIdea: string;
 
     try {
       refinedIdea = await retryWithBackoff(async () => {
-        const chat = await client.chat.completions.create({
-          model: "gpt-4o-mini",
+        const chat = await client.messages.create({
+          model: "claude-3-5-haiku-20241022",
+          max_tokens: 100,
           temperature: 0.2,
-          max_tokens: 200,
           messages: [
             {
-              role: "system",
-              content: "You are an assistant that rewrites messy or unclear business ideas into clear, professional startup idea statements.\nRules:\n- Correct grammar, spelling, and structure.\n- Prefer one clear sentence; if the user expresses more than one distinct essential concept, you may use two sentences.\n- Never use more than two sentences.\n- Preserve all key details mentioned by the user.\n- You may lightly enrich the phrasing with obvious business context (e.g., target audience, product type), but do not invent new features or markets.\n- Keep it concise: aim for 20–30 words; allow up to 40 words if needed to preserve essential details.\n- If the user's input is a question, reframe it as a neutral business idea statement.\n- Tone: professional, concise, business-oriented.\n- Return only the refined sentence(s), nothing else.",
-            },
-            { role: "user", content: rawIdea },
-          ],
+              role: "user",
+              content: `You are an assistant that rewrites messy or unclear business ideas into clear, professional startup idea statements.
+
+Rules:
+- Correct grammar, spelling, and structure.
+- Prefer one clear sentence; if the user expresses more than one distinct essential concept, you may use two sentences.
+- Never use more than two sentences.
+- Preserve all key details mentioned by the user.
+- You may lightly enrich the phrasing with obvious business context (e.g., target audience, product type), but do not invent new features or markets.
+- Keep it concise: aim for 20–30 words; allow up to 40 words if needed to preserve essential details.
+- If the user's input is a question, reframe it as a neutral business idea statement.
+- Tone: professional, concise, business-oriented.
+- Return only the refined sentence(s), nothing else.
+
+Idea to refine: ${rawIdea}`
+            }
+          ]
         });
 
-        const text = chat.choices?.[0]?.message?.content?.trim();
+        const text = chat.content?.[0]?.type === 'text' ? chat.content[0].text?.trim() : '';
         if (!text) {
           throw new Error('No response from AI model');
         }

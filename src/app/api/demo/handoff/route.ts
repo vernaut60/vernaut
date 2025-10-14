@@ -4,7 +4,8 @@ import { z } from 'zod'
 
 // Input validation schema
 const handoffSchema = z.object({
-  guest_session_id: z.string().min(1, 'Guest session ID is required')
+  guest_session_id: z.string().min(1, 'Guest session ID is required'),
+  idempotency_key: z.string().optional() // Optional idempotency key for request deduplication
 })
 
 // Response validation schema
@@ -187,6 +188,7 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
   const ideaToInsert = {
     user_id: userId,
     idea_text: guestIdeas[0].idea_text,
+    title: guestIdeas[0].title,
     problem: guestIdeas[0].problem,
     audience: guestIdeas[0].audience,
     solution: guestIdeas[0].solution,
@@ -205,6 +207,14 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
       .single()
     
     if (result.error) {
+      // Handle specific database constraint violations
+      if (result.error.code === '23505') { // Unique constraint violation
+        console.log('🔄 Idea already exists for this user, skipping duplicate')
+        return { 
+          data: null, 
+          error: null 
+        }
+      }
       throw new Error(`Database insert error: ${result.error.message}`)
     }
     
@@ -225,9 +235,19 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
     throw new Error(`Failed to transfer ideas: ${errorMessage}`)
   }
 
+  // Handle case where idea already exists (duplicate)
+  if (!transferredIdea) {
+    console.log('ℹ️ Idea already exists for this user, no transfer needed')
+    return { 
+      transferred: 0, 
+      ideas: [],
+      message: 'Idea already exists for this user'
+    }
+  }
+
   return { 
-    transferred: transferredIdea ? 1 : 0, 
-    ideas: transferredIdea ? [transferredIdea] : []
+    transferred: 1, 
+    ideas: [transferredIdea]
   }
 }
 
@@ -240,8 +260,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('Request body:', body)
 
-    const { guest_session_id } = handoffSchema.parse(body)
+    const { guest_session_id, idempotency_key } = handoffSchema.parse(body)
     console.log('Validated guest_session_id:', guest_session_id)
+    console.log('Idempotency key:', idempotency_key)
 
     // Step 2: Extract user ID from JWT
     console.log('Step 2: Extracting user ID from JWT...')
