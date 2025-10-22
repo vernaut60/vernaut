@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { motion } from 'framer-motion'
 
 interface DashboardPageProps {
@@ -185,8 +184,7 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
   }
 
   return (
-    <ProtectedRoute>
-      <main className="min-h-screen w-full bg-black text-white">
+    <main className="min-h-screen w-full bg-black text-white">
         {/* Background graphics similar to landing page */}
         <div className="absolute inset-0">
           {/* Faint gradient overlay at the top */}
@@ -581,6 +579,5 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
           </motion.div>
         </div>
       </main>
-    </ProtectedRoute>
   )
 }

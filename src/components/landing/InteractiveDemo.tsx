@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface IdeaBreakdown {
@@ -129,8 +129,8 @@ const PLACEHOLDER_EXAMPLES = [
   const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null)
   const [currentTipIndex, setCurrentTipIndex] = useState(0)
   
-  // All tips mixed and matched across phases
-  const allTips = [
+  // All tips mixed and matched across phases - memoized to prevent recreation on every render
+  const allTips = useMemo(() => [
     // Validation & Research Tips
     "💡 42% of startups fail by building something nobody wants. Validation first, building second.",
     "🎯 The #1 mistake? Skipping customer research and jumping straight to code.",
@@ -172,10 +172,10 @@ const PLACEHOLDER_EXAMPLES = [
     "🎯 Focus beats feature creep every single time.",
     "💡 Customer interviews reveal insights that surveys never will.",
     "🚀 The best time to launch was yesterday. The second best is now."
-  ]
+  ], [])
 
-  // Progress stages (40 seconds total)
-  const progressStages = [
+  // Progress stages (40 seconds total) - memoized to prevent recreation on every render
+  const progressStages = useMemo(() => [
     { 
       label: "🔍 Analyzing your business model...", 
       duration: 10000, 
@@ -196,7 +196,7 @@ const PLACEHOLDER_EXAMPLES = [
       duration: 10000, 
       progress: 100
     }
-  ]
+  ], [])
 
   // Simple static number display
   const AnimatedNumber = ({ value }: { value: number }) => {
@@ -214,10 +214,13 @@ const PLACEHOLDER_EXAMPLES = [
         const newProgress = prev + 0.5 // 0.5% every 200ms for smooth animation
         const stageIndex = Math.floor(newProgress / 25)
         
-        if (stageIndex !== currentStage && stageIndex < progressStages.length) {
-          setCurrentStage(stageIndex)
-          setCurrentTipIndex(0) // Reset tip index for new stage
-        }
+        setCurrentStage(prevStage => {
+          if (stageIndex !== prevStage && stageIndex < progressStages.length) {
+            setCurrentTipIndex(0) // Reset tip index for new stage
+            return stageIndex
+          }
+          return prevStage
+        })
         
         if (newProgress >= 100) {
           // Don't clear interval - keep it running for Phase 5
@@ -229,16 +232,18 @@ const PLACEHOLDER_EXAMPLES = [
     }, 200)
     
     setProgressInterval(interval)
-  }, [currentStage, progressStages.length])
+  }, [progressStages.length]) // Removed currentStage - using functional setState instead
   
   const stopProgressBar = useCallback(() => {
-    if (progressInterval) {
-      clearInterval(progressInterval)
-      setProgressInterval(null)
-    }
+    setProgressInterval(prev => {
+      if (prev) {
+        clearInterval(prev)
+      }
+      return null
+    })
     setProgress(0)
     setCurrentStage(0)
-  }, [progressInterval])
+  }, []) // Empty deps - using functional setState
 
   // Smooth scroll to competitor CTA
   const scrollToCompetitorCTA = () => {
@@ -373,7 +378,7 @@ const PLACEHOLDER_EXAMPLES = [
         previewTimer.current = null
       }
     }
-  }, [idea, refinedPreview, previewLoading])
+  }, [idea, refinedPreview]) // Removed previewLoading to prevent infinite loop
 
   const handleRefineIdea = async () => {
     if (!idea.trim() || isResetting) {
@@ -515,15 +520,14 @@ const PLACEHOLDER_EXAMPLES = [
 
   // Tip cycling effect - now uses mixed tips from all categories
   useEffect(() => {
-    if (breakdownLoading) {
-      const isExtendedPhase = progress >= 100
-      const tipInterval = setInterval(() => {
-        setCurrentTipIndex(prev => (prev + 1) % allTips.length)
-      }, isExtendedPhase ? 2000 : 3000) // Faster cycling for Phase 5 (2s vs 3s)
-      
-      return () => clearInterval(tipInterval)
-    }
-  }, [breakdownLoading, allTips.length, progress])
+    if (!breakdownLoading) return
+
+    const tipInterval = setInterval(() => {
+      setCurrentTipIndex(prev => (prev + 1) % allTips.length)
+    }, 3000) // Cycle every 3 seconds
+    
+    return () => clearInterval(tipInterval)
+  }, [breakdownLoading, allTips.length]) // Removed progress - was causing constant recreations
 
   // Progressive card reveal effect
   useEffect(() => {

@@ -22,9 +22,12 @@ export default function HeroSection() {
   useEffect(() => {
     let currentIndex = 0
     let isDeleting = false
-    let timeoutId: number
+    let timeoutId: number | undefined
+    let isCancelled = false // Flag to prevent state updates after cleanup
 
     const typeText = () => {
+      if (isCancelled) return // Don't proceed if effect was cleaned up
+      
       const currentBenefit = BENEFITS[currentBenefitIndex]
       
       if (isDeleting) {
@@ -33,6 +36,7 @@ export default function HeroSection() {
         if (currentIndex === 0) {
           isDeleting = false
           setCurrentBenefitIndex((prev) => (prev + 1) % BENEFITS.length)
+          return // Let the effect restart with new benefit
         }
         timeoutId = window.setTimeout(typeText, 50) // Faster deleting
       } else {
@@ -40,8 +44,10 @@ export default function HeroSection() {
         currentIndex++
         if (currentIndex === currentBenefit.length) {
           timeoutId = window.setTimeout(() => {
-            isDeleting = true
-            typeText()
+            if (!isCancelled) {
+              isDeleting = true
+              typeText()
+            }
           }, 2000) // Pause for 2 seconds before deleting
         } else {
           timeoutId = window.setTimeout(typeText, 100) // Slower typing
@@ -52,7 +58,8 @@ export default function HeroSection() {
     typeText() // Start the typing effect
 
     return () => {
-      if (timeoutId) {
+      isCancelled = true // Mark as cancelled
+      if (timeoutId !== undefined) {
         clearTimeout(timeoutId)
       }
     }

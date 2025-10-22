@@ -2,7 +2,6 @@
 
 import React from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { motion } from 'framer-motion'
 
 export default function IdeaDetailPage() {
@@ -11,8 +10,7 @@ export default function IdeaDetailPage() {
   const ideaId = params.id
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
+    <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
         {/* Header */}
         <div className="border-b border-neutral-700/50 bg-neutral-800/30 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -88,6 +86,5 @@ export default function IdeaDetailPage() {
           </motion.div>
         </div>
       </div>
-    </ProtectedRoute>
   )
 }
