@@ -1,8 +1,8 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { User, Session } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 
 interface AuthContextType {
   user: User | null
@@ -22,6 +22,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [isSessionExpired, setIsSessionExpired] = useState(false)
   const [sessionError, setSessionError] = useState<string | null>(null)
+
+  // Create Supabase client only once, inside React component lifecycle
+  const supabase = useMemo(() => {
+    console.log('[AuthContext] Creating Supabase client...')
+    return createClient()
+  }, [])
 
   // Session validation function
   const validateSession = (session: Session | null): boolean => {
@@ -133,13 +139,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout
+
     // Get initial session
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-      setUser(session?.user ?? null)
-      validateSession(session)
-      setLoading(false)
+      try {
+        console.log('[AuthContext] Getting initial session...')
+        
+        // Set a timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          console.warn('[AuthContext] Session loading timeout after 3s, assuming no session')
+          setSession(null)
+          setUser(null)
+          setLoading(false)
+        }, 3000) // 3 second timeout
+        
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        // Clear timeout if we get a response
+        clearTimeout(timeoutId)
+        
+        if (error) {
+          console.error('[AuthContext] Error getting session:', error)
+          setLoading(false)
+          return
+        }
+        
+        console.log('[AuthContext] Session loaded:', session ? 'authenticated' : 'no session')
+        setSession(session)
+        setUser(session?.user ?? null)
+        validateSession(session)
+        setLoading(false)
+      } catch (error) {
+        console.error('[AuthContext] Exception getting session:', error)
+        clearTimeout(timeoutId)
+        setLoading(false)
+      }
     }
 
     getInitialSession()
@@ -147,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('[AuthContext] Auth state changed:', event)
         setSession(session)
         setUser(session?.user ?? null)
         validateSession(session)
@@ -159,22 +195,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(timeoutId)
+      subscription.unsubscribe()
+    }
   }, [])
 
-  // Periodic session validation
-  useEffect(() => {
-    if (!session) return
-
-    const validateInterval = setInterval(() => {
-      if (session && !validateSession(session)) {
-        // Try to refresh the session automatically
-        refreshSession()
-      }
-    }, 60000) // Check every minute
-
-    return () => clearInterval(validateInterval)
-  }, [session])
+  // Note: Session auto-refresh is now handled by Supabase client (autoRefreshToken: true)
+  // The periodic validation above is no longer needed, but kept for backwards compatibility
 
   const signOut = async () => {
     try {

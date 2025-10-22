@@ -1,27 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
+/**
+ * DEPRECATED: Use @/lib/supabase/client or @/lib/supabase/server instead
+ * 
+ * This file is kept for backwards compatibility with existing code.
+ * 
+ * Migration guide:
+ * - Client components: import { createClient } from '@/lib/supabase/client'
+ * - Server components: import { createClient } from '@/lib/supabase/server'
+ * - Middleware: import { createClient } from '@/lib/supabase/middleware'
+ */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+import { createClient as createBrowserClient } from '@/lib/supabase/client'
 
-if (!supabaseUrl) {
-  throw new Error('Missing environment variable: NEXT_PUBLIC_SUPABASE_URL')
-}
-
-if (!supabaseAnonKey) {
-  throw new Error('Missing environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY')
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// For server-side operations that require elevated permissions
-// Uncomment when you need admin client and add SUPABASE_SERVICE_ROLE_KEY to .env.local
-// export const supabaseAdmin = createClient<Database>(
-//   supabaseUrl,
-//   process.env.SUPABASE_SERVICE_ROLE_KEY!,
-//   {
-//     auth: {
-//       autoRefreshToken: false,
-//       persistSession: false
-//     }
-//   }
-// )
+// Export for backwards compatibility
+export const supabase = createBrowserClient()

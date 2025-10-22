@@ -162,28 +162,23 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
     // Listen for auth state changes (magic link confirmation)
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' && session) {
-                // Only show welcome toast for actual sign-in events, not session restoration
-                // We'll track this with a session storage flag to avoid showing on page refresh
-                const hasShownWelcome = sessionStorage.getItem('auth-welcome-shown')
-                
-                if (!hasShownWelcome) {
-                    addToast?.('Welcome! You\'re now signed in.', 'success')
-                    sessionStorage.setItem('auth-welcome-shown', 'true')
-                }
-                
+            // Only handle SIGNED_IN events when the login modal is actually open
+            // This ensures we only redirect for NEW sign-ins, not session restorations
+            if (event === 'SIGNED_IN' && session && isOpen) {
+                console.log('[LoginModal] New sign-in detected (modal was open)')
+                addToast?.('Welcome! You\'re now signed in.', 'success')
                 handleClose()
-                router.push('/')
+                router.push('/dashboard')
             }
             
-            // Clear the flag when user signs out
-            if (event === 'SIGNED_OUT') {
-                sessionStorage.removeItem('auth-welcome-shown')
+            // Log session restoration for debugging (when modal is closed)
+            if (event === 'SIGNED_IN' && session && !isOpen) {
+                console.log('[LoginModal] Session restored (modal was closed, staying on current page)')
             }
         })
 
         return () => subscription.unsubscribe()
-    }, [router, handleClose, addToast])
+    }, [isOpen, router, handleClose, addToast])
 
     // Email validation function
     const validateEmail = (email: string): { isValid: boolean; error: string | null } => {
