@@ -126,7 +126,6 @@ const PLACEHOLDER_EXAMPLES = [
   // Progress bar state
   const [progress, setProgress] = useState(0)
   const [currentStage, setCurrentStage] = useState(0)
-  const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null)
   const [currentTipIndex, setCurrentTipIndex] = useState(0)
   
   // All tips mixed and matched across phases - memoized to prevent recreation on every render
@@ -209,7 +208,7 @@ const PLACEHOLDER_EXAMPLES = [
     setCurrentStage(0)
     setCurrentTipIndex(0)
     
-    const interval = setInterval(() => {
+    setInterval(() => {
       setProgress(prev => {
         const newProgress = prev + 0.5 // 0.5% every 200ms for smooth animation
         const stageIndex = Math.floor(newProgress / 25)
@@ -231,16 +230,10 @@ const PLACEHOLDER_EXAMPLES = [
       })
     }, 200)
     
-    setProgressInterval(interval)
   }, [progressStages.length]) // Removed currentStage - using functional setState instead
   
   const stopProgressBar = useCallback(() => {
-    setProgressInterval(prev => {
-      if (prev) {
-        clearInterval(prev)
-      }
-      return null
-    })
+    // Progress bar is now controlled by the interval variable directly
     setProgress(0)
     setCurrentStage(0)
   }, []) // Empty deps - using functional setState

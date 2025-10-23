@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeoutId)
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase.auth])
 
   // Note: Session auto-refresh is now handled by Supabase client (autoRefreshToken: true)
   // The periodic validation above is no longer needed, but kept for backwards compatibility

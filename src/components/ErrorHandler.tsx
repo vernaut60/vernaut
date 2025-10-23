@@ -33,7 +33,7 @@ export default function ErrorHandler() {
     // Success messages
     const successMessages: Record<string, string> = {
       signed_out: 'You have been signed out successfully.',
-      signed_in: 'Welcome back!',
+      signed_in: 'Welcome! You\'re now signed in.',
     }
 
     if (error && errorMessages[error]) {
