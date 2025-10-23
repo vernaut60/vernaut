@@ -351,30 +351,32 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                         </span>
                       </motion.div>
                     </div>
-                    {/* Top-right New Idea button (keeps existing iconography/animations) */}
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.4, delay: 0.35 }}
-                      whileHover={{ scale: 1.05, y: -2 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleNewIdea}
-                      className="inline-flex items-center justify-center self-start sm:self-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 hover:shadow-[0_0_12px_rgba(99,102,241,0.6)] transition-all duration-300 shadow-lg relative overflow-hidden group"
-                    >
-                      <motion.div 
-                        className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500"
-                        animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                        transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-                        style={{ backgroundSize: '200% 200%' }}
-                      />
-                      <motion.div
-                        className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                        animate={{ rotate: [0, 360], scale: [1, 1.2, 1] }}
-                        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-                      />
-                      <span className="mr-2 relative z-10">+</span>
-                      <span className="relative z-10">New Idea</span>
-                    </motion.button>
+                    {/* Top-right New Idea button - Only show when user has ideas */}
+                    {!ideasLoading && ideas.length > 0 && (
+                      <motion.button
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.4, delay: 0.35 }}
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleNewIdea}
+                        className="inline-flex items-center justify-center self-start sm:self-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 hover:shadow-[0_0_12px_rgba(99,102,241,0.6)] transition-all duration-300 shadow-lg relative overflow-hidden group"
+                      >
+                        <motion.div 
+                          className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500"
+                          animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                          style={{ backgroundSize: '200% 200%' }}
+                        />
+                        <motion.div
+                          className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                          animate={{ rotate: [0, 360], scale: [1, 1.2, 1] }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                        />
+                        <span className="mr-2 relative z-10">+</span>
+                        <span className="relative z-10">New Idea</span>
+                      </motion.button>
+                    )}
                   </div>
 
                   {/* Quiet usage line under header */}
@@ -438,10 +440,10 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                   <div className="space-y-4 sm:space-y-6">
                     <div className="space-y-2">
                       <p className="text-xl sm:text-2xl font-semibold text-white flex items-center justify-center gap-2">
-                        🪄 No ideas yet
+                        Ready to validate your first idea?
                       </p>
                       <p className="text-neutral-300 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
-                        Start by creating one — Vernaut will turn it into a full business concept ✨
+                        Get AI-powered insights on your problem, audience, solution, and monetization in minutes ✨
                       </p>
                     </div>
                     
@@ -452,10 +454,10 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                       whileHover={{ scale: 1.05, y: -2 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={handleNewIdea}
-                      className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 hover:shadow-[0_0_12px_rgba(99,102,241,0.6)] transition-all duration-300 shadow-lg"
+                      className="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold text-lg rounded-lg hover:from-blue-700 hover:to-purple-700 hover:shadow-[0_0_20px_rgba(99,102,241,0.7)] transition-all duration-300 shadow-xl"
                     >
-                      <span className="mr-2">New Idea</span>
-                      <span>💡</span>
+                      <span className="mr-2">💡</span>
+                      <span>Create Your First Idea</span>
                     </motion.button>
                   </div>
                 </div>
@@ -543,23 +545,6 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                       </div>
                     </motion.div>
                   ))}
-                  
-                  {/* New Idea Card */}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleNewIdea}
-                    className="group relative bg-gradient-to-br from-blue-600/10 to-purple-600/10 border-2 border-dashed border-blue-500/30 rounded-lg hover:border-blue-400/50 hover:from-blue-600/20 hover:to-purple-600/20 transition-all duration-300 cursor-pointer overflow-hidden min-h-[200px] flex items-center justify-center"
-                  >
-                    <div className="text-center p-6">
-                      <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">💡</div>
-                      <h3 className="text-white font-medium text-lg mb-2">Create New Idea</h3>
-                      <p className="text-neutral-400 text-sm">Start analyzing your next startup idea</p>
-                    </div>
-                  </motion.div>
                 </div>
               )}
               </div>

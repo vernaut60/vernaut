@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
           userId: data.session.user.id,
           redirectTo: next
         })
-        return NextResponse.redirect(`${origin}${next}`)
+        // Add success parameter to show welcome toast
+        const redirectUrl = new URL(next, origin)
+        redirectUrl.searchParams.set('success', 'signed_in')
+        return NextResponse.redirect(redirectUrl.toString())
       }
     } catch (error) {
       logger.authError('Auth callback exception', {

@@ -118,3 +118,6 @@ COMMENT ON TABLE competitors IS 'Stores competitor intelligence and analysis for
 -- Migration Complete
 -- =====================================================
 
+
+
+
