@@ -13,8 +13,11 @@ const requestSchema = z.object({
     .min(1, 'Idea text is required')
     .max(1000, 'Idea text too long (max 1000 characters)')
     .refine(
-      (text) => text.trim().split(/\s+/).length >= 2,
-      'Idea must contain at least 2 words'
+      (text) => {
+        const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+        return words.length >= 3; // Require at least 3 words for meaningful refinement
+      },
+      'Idea must contain at least 3 words to refine'
     )
 });
 
@@ -155,6 +158,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rawIdea = validatedInput.idea.trim();
+    const inputWordCount = rawIdea.split(/\s+/).filter(w => w.length > 0).length;
 
     // Step 5: Environment validation
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -166,15 +170,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 6: Anthropic API call with retry logic
+    // Step 6: Determine adaptive limits based on input length
+    let targetWordMin: number;
+    let targetWordMax: number;
+    let maxTokens: number;
+    let maxWordsAllowed: number;
+
+    if (inputWordCount <= 15) {
+      // Short inputs: Keep it concise
+      targetWordMin = 20;
+      targetWordMax = 30;
+      maxWordsAllowed = 40;
+      maxTokens = 120; // ~90 words max
+    } else if (inputWordCount <= 40) {
+      // Medium inputs: Allow more detail preservation
+      targetWordMin = 30;
+      targetWordMax = 50;
+      maxWordsAllowed = 70;
+      maxTokens = 180; // ~135 words max
+    } else {
+      // Long inputs: Preserve as much detail as possible
+      targetWordMin = 50;
+      targetWordMax = 80;
+      maxWordsAllowed = 100;
+      maxTokens = 250; // ~187 words max
+    }
+
+    // Step 7: Anthropic API call with retry logic
     const client = new Anthropic({ apiKey });
     let refinedIdea: string;
 
     try {
       refinedIdea = await retryWithBackoff(async () => {
+        const lengthGuidance = inputWordCount <= 15
+          ? `Keep it concise: aim for ${targetWordMin}–${targetWordMax} words; allow up to ${maxWordsAllowed} words if needed to preserve essential details.`
+          : inputWordCount <= 40
+          ? `Aim for ${targetWordMin}–${targetWordMax} words to preserve the user's key details; allow up to ${maxWordsAllowed} words if the input contains multiple important concepts.`
+          : `The user provided detailed information - preserve all key details. Aim for ${targetWordMin}–${targetWordMax} words; you may use up to ${maxWordsAllowed} words to capture all essential elements.`;
+
         const chat = await client.messages.create({
           model: "claude-3-5-haiku-20241022",
-          max_tokens: 100,
+          max_tokens: maxTokens,
           temperature: 0.2,
           messages: [
             {
@@ -182,12 +218,16 @@ export async function POST(request: NextRequest) {
               content: `You are an assistant that rewrites messy or unclear business ideas into clear, professional startup idea statements.
 
 Rules:
-- Correct grammar, spelling, and structure.
+- Correct obvious typos and spelling errors (e.g., "thcat" → "that", "wed" → "wed" only if it makes sense in context).
+- Fix grammar and structure while preserving the user's intended meaning.
 - Prefer one clear sentence; if the user expresses more than one distinct essential concept, you may use two sentences.
 - Never use more than two sentences.
-- Preserve all key details mentioned by the user.
-- You may lightly enrich the phrasing with obvious business context (e.g., target audience, product type), but do not invent new features or markets.
-- Keep it concise: aim for 20–30 words; allow up to 40 words if needed to preserve essential details.
+- Preserve ALL key details mentioned by the user - do not drop important information.
+- If the input appears to be random characters, gibberish, or completely nonsensical (e.g., "wedwedwed ed wed wed wed" with no meaningful pattern), try to extract ANY meaningful words or concepts. If you cannot extract any meaningful concept, return a neutral version that acknowledges the input needs clarification, such as "A service or product that requires further clarification" - but ONLY if the input is truly nonsensical.
+- If the input is very short (1-3 words) or a single concept, DO NOT invent generic business details. Instead, expand naturally while staying true to what the user actually wrote. For example, "AI" should become something like "A platform or service that leverages artificial intelligence" - NOT a generic "AI-powered platform for businesses" unless the user mentioned businesses.
+- For longer inputs with typos but clear meaning, correct the typos and improve structure while keeping the core idea intact.
+- For longer inputs, you may lightly enrich the phrasing with obvious business context (e.g., target audience, product type), but do not invent new features or markets.
+- ${lengthGuidance}
 - If the user's input is a question, reframe it as a neutral business idea statement.
 - Tone: professional, concise, business-oriented.
 - Return only the refined sentence(s), nothing else.
@@ -202,10 +242,16 @@ Idea to refine: ${rawIdea}`
           throw new Error('No response from AI model');
         }
 
-        // Post-process: normalize whitespace and cap to 40 words
+        // Post-process: normalize whitespace and enforce adaptive word limit
         const normalized = text.replace(/\s+/g, " ").trim();
         const words = normalized.split(/\s+/);
-        return words.length > 40 ? words.slice(0, 40).join(" ") + "." : normalized;
+        if (words.length > maxWordsAllowed) {
+          // If over limit, truncate but try to end at sentence boundary
+          const truncated = words.slice(0, maxWordsAllowed).join(" ");
+          // Add period if not ending with punctuation
+          return truncated + (truncated.match(/[.!?]$/) ? "" : ".");
+        }
+        return normalized;
       }, 3, 1000);
 
     } catch (error) {
