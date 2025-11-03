@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase'
 import { logAuthError, logNetworkError, logTimeoutError, logRateLimitError, logRetryError } from '@/lib/errorLogger'
 import AuthErrorBoundary from './AuthErrorBoundary'
 import { ToastContext } from '@/contexts/ToastContext'
+import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
 
 interface LoginModalProps {
     isOpen: boolean
@@ -610,11 +612,12 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                         : 'Sign in to uncover real competitors, AI-mapped markets, and your personalized roadmap to success.'}
                                 </p>
 
-                                <button
+                                <Button
                                     type="button"
+                                    variant="white"
                                     onClick={() => handleSocialLogin('google')}
                                     disabled={isLoading}
-                                    className="w-full mb-1 inline-flex items-center justify-center gap-2 bg-white text-gray-900 font-semibold py-3 px-4 rounded-lg hover:bg-gray-100 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-gray-300"
+                                    className="mb-1"
                                 >
                                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -623,18 +626,19 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                                     </svg>
                                     Continue with Google
-                                </button>
+                                </Button>
 
                                 <p className="text-[11px] text-gray-400 my-1">or use your email instead</p>
 
-                                <button
+                                <Button
                                     type="button"
+                                    variant="ghost"
                                     onClick={() => setShowEntryChoice(false)}
                                     disabled={isLoading}
-                                    className="w-full mb-2 bg-transparent text-white font-semibold py-3 px-4 rounded-lg hover:bg-white/10 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-gray-600"
+                                    className="w-full mb-2 border border-gray-600"
                                 >
                                     Continue with Email
-                                </button>
+                                </Button>
 
                                 <p className="text-xs text-gray-500 mt-3">
                                     By continuing, you agree to our <a className="underline text-gray-300">Terms</a> and <a className="underline text-gray-300">Privacy Policy</a>.
@@ -654,12 +658,12 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                         <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">
                                             Email Address
                                         </label>
-                                        <input
+                                        <Input
                                             id="email"
                                             type="email"
                                             value={email}
                                             onChange={(e) => handleEmailChange(e.target.value)}
-                                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-gray-800 text-white placeholder-gray-400 ${
+                                            className={`bg-gray-800 placeholder-gray-400 ${
                                                 emailTouched && emailError 
                                                     ? 'border-red-500 bg-red-900/50' 
                                                     : emailTouched && isEmailValid 
@@ -667,7 +671,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                                         : error 
                                                             ? 'border-red-500 bg-red-900/50' 
                                                             : 'border-gray-600'
-                                                }`}
+                                                } focus:ring-blue-500 focus:border-blue-500`}
                                             placeholder="Enter your email"
                                             disabled={isLoading}
                                         />
@@ -824,13 +828,13 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
 
                                     {/* Action Buttons */}
                                     <div className="space-y-2 pt-1">
-                                        <button
+                                        <Button
                                             type="button"
                                             onClick={handleMagicLink}
                                             disabled={isLoading || !email.trim() || (emailTouched && !isEmailValid) || !isOnline || isTimedOut || isRateLimited || isRetryingRequest}
-                                            className={`w-full font-semibold py-3 px-4 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 ${
+                                            className={`w-full font-semibold py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                                                 !isOnline 
-                                                    ? 'bg-gray-600 text-gray-300 cursor-not-allowed' 
+                                                    ? 'bg-gray-600 text-gray-300 cursor-not-allowed hover:bg-gray-600' 
                                                     : isRetryingRequest
                                                         ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                                                         : isRateLimited
@@ -870,7 +874,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                                             ) : (
                                                 'Send Magic Link'
                                             )}
-                                        </button>
+                                        </Button>
 
                                     </div>
 
@@ -879,27 +883,29 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                         )}
 
                         {/* Close Button */}
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
                             onClick={handleClose}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white p-1"
                             disabled={isLoading}
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
-                        </button>
+                        </Button>
                         {/* Close Button */}
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
                             onClick={() => (isLoading ? null : (showEntryChoice ? handleClose() : setShowEntryChoice(true)))}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white p-1"
                             disabled={isLoading}
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
-                        </button>
+                        </Button>
                     </motion.div>
                 </motion.div>
             )}

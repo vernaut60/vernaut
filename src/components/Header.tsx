@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import LoginModal from './auth/login'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -37,9 +38,9 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           {/* Brand Name - Left */}
           <div className="flex items-center">
-            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            <Link href="/" className="text-xl sm:text-2xl font-bold text-white tracking-tight hover:opacity-80 transition-opacity duration-150 active:scale-95">
               Vernaut
-            </h1>
+            </Link>
           </div>
 
           {/* Desktop Navigation - Right */}
