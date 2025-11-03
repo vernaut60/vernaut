@@ -266,26 +266,13 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
         await new Promise(resolve => setTimeout(resolve, delay))
 
         try {
-            // Get the correct redirect URL for production
-            const getRedirectUrl = () => {
-                if (typeof window !== 'undefined') {
-                    // In production, use the actual domain
-                    if (process.env.NODE_ENV === 'production') {
-                        return `${window.location.origin}/auth/callback?next=/dashboard`
-                    }
-                    // In development, use localhost
-                    return `${window.location.origin}/auth/callback?next=/dashboard`
-                }
-                // Fallback for SSR
-                return process.env.NODE_ENV === 'production'
-                    ? 'https://vernaut.com/auth/callback?next=/dashboard'  // Replace with your actual domain
-                    : 'http://localhost:3000/auth/callback?next=/dashboard'
-            }
+            // Use dynamic origin - works for any domain (vernaut.ai, vernaut.vercel.app, localhost, etc.)
+            const redirectUrl = `${window.location.origin}/auth/callback?next=/dashboard`
 
             const { error } = await supabase.auth.signInWithOtp({
                     email: email.trim(),
                 options: {
-                    emailRedirectTo: getRedirectUrl()
+                    emailRedirectTo: redirectUrl
                 }
             })
 
@@ -505,15 +492,13 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
         setIsLoading(true)
 
         try {
-            // Get the correct base URL for redirects
-            const baseUrl = process.env.NODE_ENV === 'production'
-                ? window.location.origin
-                : 'http://localhost:3000'
+            // Use dynamic origin - works for any domain (vernaut.ai, vernaut.vercel.app, localhost, etc.)
+            const redirectUrl = `${window.location.origin}/auth/callback?next=/dashboard`
 
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: provider,
                 options: {
-                    redirectTo: `${baseUrl}/auth/callback?next=/dashboard`
+                    redirectTo: redirectUrl
                 }
             })
 
