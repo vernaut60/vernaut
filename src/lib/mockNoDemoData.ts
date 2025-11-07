@@ -137,7 +137,16 @@ export const mockNoDemoData = {
         "Activity logging"
       ],
       your_advantage: "FarmLogs serves all crops broadly. You can specialize in wine grapes with variety-specific disease models and vintage quality predictions that matter to premium winemakers.",
-      market_position: "leader" as const
+      market_position: "leader" as const,
+      positioning: {
+        target_market: "Mid-to-large farms (500-5000 acres) across all crop types",
+        price_tier: "premium" as const,
+        price_details: "$199/month",
+        key_strengths: "Comprehensive field management with strong mobile apps and weather integration",
+        company_stage: "well-funded" as const,
+        geographic_focus: "US and Global"
+      },
+      threat_level: 8
     },
     {
       id: "agworld",
@@ -152,7 +161,16 @@ export const mockNoDemoData = {
         "Mobile apps"
       ],
       your_advantage: "AgWorld is strong on compliance but weak on AI/predictive features. Your satellite imagery + weather data analysis provides proactive insights they can't match.",
-      market_position: "challenger" as const
+      market_position: "challenger" as const,
+      positioning: {
+        target_market: "Professional farm managers and agronomists requiring compliance tracking",
+        price_tier: "mid-range" as const,
+        price_details: "$149/month per user",
+        key_strengths: "Strong compliance and reporting features with team collaboration tools",
+        company_stage: "well-funded" as const,
+        geographic_focus: "Global"
+      },
+      threat_level: 7
     },
     {
       id: "granular",
@@ -167,7 +185,16 @@ export const mockNoDemoData = {
         "Multi-farm operations"
       ],
       your_advantage: "Granular targets massive commercial farms ($50K+ budgets). You can win small-to-medium vineyards (10-200 acres) with affordable pricing and simpler UX.",
-      market_position: "leader" as const
+      market_position: "leader" as const,
+      positioning: {
+        target_market: "Large commercial farms and agribusinesses (5000+ acres)",
+        price_tier: "enterprise" as const,
+        price_details: "Custom enterprise pricing ($50K+ annual contracts)",
+        key_strengths: "Enterprise-level financial planning and multi-farm operations management",
+        company_stage: "enterprise" as const,
+        geographic_focus: "US and Global"
+      },
+      threat_level: 9
     },
     {
       id: "cropwise",
@@ -182,7 +209,16 @@ export const mockNoDemoData = {
         "Analytics dashboard"
       ],
       your_advantage: "Cropwise has good imagery but focuses on row crops (corn, soybeans). Wine grapes have unique needs (vintage quality, sugar content tracking) that you'll specialize in.",
-      market_position: "challenger" as const
+      market_position: "challenger" as const,
+      positioning: {
+        target_market: "Row crop farmers (corn, soybeans, wheat) focusing on precision agriculture",
+        price_tier: "mid-range" as const,
+        price_details: "$8-12/acre/year",
+        key_strengths: "Advanced satellite imagery and variable rate technology for row crops",
+        company_stage: "well-funded" as const,
+        geographic_focus: "US and Europe"
+      },
+      threat_level: 6
     },
     {
       id: "fieldview",
@@ -197,7 +233,16 @@ export const mockNoDemoData = {
         "Historical data analysis"
       ],
       your_advantage: "FieldView is backed by Bayer (deep pockets) but is generic. Your wine-specific AI models for disease prediction and irrigation optimization will be more accurate for vineyards.",
-      market_position: "leader" as const
+      market_position: "leader" as const,
+      positioning: {
+        target_market: "All farmers seeking free-to-start field management with equipment integration",
+        price_tier: "budget" as const,
+        price_details: "Free tier + $5-7/acre premium features",
+        key_strengths: "Free entry point with strong equipment integration and Bayer backing",
+        company_stage: "enterprise" as const,
+        geographic_focus: "Global"
+      },
+      threat_level: 9
     }
   ],
   

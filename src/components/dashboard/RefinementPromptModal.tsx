@@ -7,6 +7,7 @@ interface RefinementPromptModalProps {
   isOpen: boolean
   onAccept: () => void
   onReject: () => void
+  onClose?: () => void
   refinedText: string
   originalText: string
 }
@@ -15,6 +16,7 @@ export default function RefinementPromptModal({
   isOpen,
   onAccept,
   onReject,
+  onClose,
   refinedText,
   originalText
 }: RefinementPromptModalProps) {
@@ -64,6 +66,12 @@ export default function RefinementPromptModal({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Close modal when clicking backdrop
+            if (e.target === e.currentTarget && onClose && !isProcessing) {
+              onClose()
+            }
+          }}
         >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -75,6 +83,7 @@ export default function RefinementPromptModal({
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Modal glow effect */}
             <div className="absolute inset-0 rounded-3xl opacity-60" 
@@ -95,6 +104,18 @@ export default function RefinementPromptModal({
                       <p className="text-sm text-neutral-400">Found a clearer version of your idea</p>
                     </div>
                   </div>
+                  {onClose && (
+                    <button
+                      onClick={onClose}
+                      disabled={isProcessing}
+                      className="text-neutral-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Close modal"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
 

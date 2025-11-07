@@ -175,51 +175,16 @@ export async function POST(request: NextRequest) {
     const { idea } = requestSchema.parse(body)
     console.log('Validated idea:', idea)
 
-    // Step 1.5: Lightweight precheck for obviously insufficient inputs
-    if (idea.trim().split(' ').length < 2) {
-      return NextResponse.json({
-        success: false,
-        error: 'Please describe your idea in a bit more detail (a few words is enough).'
-      }, { status: 400 })
-    }
-
-    // Step 2: Validate whether the idea is business-relevant
-    console.log('Step 2: Validating business relevance...')
-    const validationPrompt = `
-You are a strict validator that classifies if a text is a potential business idea.
-Output ONLY one of these labels:
-
-- "valid_idea" → clearly describes a product, service, app, or startup concept.
-- "vague" → too short, unclear, or not descriptive enough.
-- "non_business" → personal statement, random phrase, insult, or unrelated to business.
-
-Text: "${idea.trim()}"
-`
-
-    const validationResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 5,
-      temperature: 0,
-      messages: [{ role: 'user', content: validationPrompt }]
-    })
-
-    const verdict = validationResponse.content[0]?.type === 'text' ? validationResponse.content[0].text?.trim().toLowerCase() : ''
-
-    if (verdict === 'vague') {
+    // Step 1.5: Validate idea is not too vague (same validation as New Idea Modal)
+    console.log('Step 1.5: Validating idea is not vague...')
+    const { validateIdeaIsNotVague } = await import('@/lib/ideaValidation')
+    const validationResult = await validateIdeaIsNotVague(idea)
+    
+    if (!validationResult.valid) {
       return NextResponse.json(
         {
           success: false,
-          error: '⚠️ Your idea seems too vague. Try describing what it does or who it helps.',
-        },
-        { status: 400 }
-      )
-    }
-
-    if (verdict === 'non_business') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: '💡 This doesn\'t look like a business idea. Try describing a product or service concept.',
+          error: validationResult.error || 'Idea validation failed',
         },
         { status: 400 }
       )
