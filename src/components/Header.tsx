@@ -6,7 +6,7 @@ import LoginModal from './auth/login'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function Header() {
-  const { user, loading, signOut } = useAuth()
+  const { user, loading, signOut, isSessionExpired } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginMode, setLoginMode] = useState<'unlock' | 'signin'>('signin')
@@ -53,7 +53,7 @@ export default function Header() {
               <div className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-2 text-sm">
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               </div>
-            ) : user ? (
+            ) : user && !isSessionExpired ? (
               <div className="flex items-center space-x-3">
                 <span className="text-white text-sm">
                   {user.email}
@@ -112,7 +112,7 @@ export default function Header() {
                 <div className="inline-flex items-center justify-center rounded-lg text-white font-medium px-4 py-3 text-sm">
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 </div>
-              ) : user ? (
+              ) : user && !isSessionExpired ? (
                 <>
                   <div className="text-white text-sm px-4 py-2">
                     {user.email}

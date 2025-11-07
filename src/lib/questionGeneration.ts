@@ -160,6 +160,7 @@ CRITICAL: Use the RIGHT input type for each question:
 **number**: Numeric input (budget, team size, timeframe)
   - Always include validation: { "min": 0, "max": reasonable_limit }
   - Add helpful placeholder showing expected range
+  - **CRITICAL for budget questions**: Use "startup_budget" (what founder has to launch), NOT "budget" (ambiguous)
 
 QUESTION EXAMPLES (Context-Agnostic):
 
@@ -168,7 +169,7 @@ QUESTION EXAMPLES (Context-Agnostic):
 "What existing solutions do your target customers currently use? What are their limitations?"
 "What regulations or certifications are required to operate in your target market?"
 "How do your target customers typically access services like this? (mobile apps, web, SMS, in-person, etc.)"
-"What budget do you have available to develop and launch this solution?"
+"What budget do you have available to start and launch this business? (startup_budget)"
 
 ❌ BAD - Makes assumptions:
 "How will you compete in the US market with established players?"
@@ -176,6 +177,7 @@ QUESTION EXAMPLES (Context-Agnostic):
 "Can you meet FDA approval requirements?"
 "What's your SaaS subscription pricing?"
 "Will customers download your iOS/Android app?"
+
 
 QUESTION DESIGN RULES:
 1. Make questions SPECIFIC to this idea (not generic startup questions)
@@ -185,6 +187,40 @@ QUESTION DESIGN RULES:
 5. Add helpful placeholder text and help_text
 6. For critical questions, set required: true
 7. Use validation appropriately (minLength for important text answers)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ CRITICAL: BUDGET QUESTIONS - CLEAR NAMING REQUIRED ⚠️
+
+When asking about money/budget, you MUST distinguish between TWO different concepts:
+
+1. **STARTUP BUDGET** (what the FOUNDER has to launch)
+   ✅ Use ID: "startup_budget" or "available_budget" or "launch_budget"
+   ❌ NEVER use: "budget", "customer_budget", "development_budget"
+   
+   Question text should adapt to business type:
+   - SaaS/Software: "What budget do you have available to develop and launch this software?"
+   - Physical Product: "What budget do you have available to manufacture and launch this product?"
+   - Service Business: "What budget do you have available to start and launch this service?"
+   - Physical Location: "What budget do you have available to set up and open this location?"
+   - Generic (works for ALL): "What budget do you have available to start and launch this business?"
+   
+   Help text: "Your available funds - personal savings, commitments, or capital to launch"
+
+2. **MARKET SPENDING** (what CUSTOMERS currently pay - optional market research)
+   ✅ Use ID: "current_market_spending" or "market_spending_intel"
+   ❌ NEVER use: "customer_budget" (too ambiguous!)
+   
+   Question: "How much do your target customers currently spend on similar [products/services/solutions]?"
+   Help text: "Understanding what customers pay helps assess pricing opportunity (optional market research)"
+   Make this: required: false
+
+WHY THIS MATTERS:
+- "startup_budget" = Used to assess if they can BUILD/LAUNCH (execution feasibility)
+- "current_market_spending" = Used to understand CUSTOMER willingness to pay (market context)
+- Confusing these causes AI to use wrong numbers in risk analysis!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 VALIDATION OBJECT ORDER (IMPORTANT):
 Always order properties: minLength before maxLength, min before max
@@ -243,15 +279,27 @@ Example structure:
     "help_text": "Be honest - this affects feasibility assessment."
   },
   {
-    "id": "budget",
+    "id": "startup_budget",
     "type": "number",
-    "text": "What budget do you have available to develop and launch this? (in USD)",
+    "text": "What budget do you have available to start and launch this business? (in USD)",
     "required": true,
-    "placeholder": "50000",
-    "help_text": "Include personal savings, funding commitments, or runway you have access to.",
+    "placeholder": "10000",
+    "help_text": "Your available funds - personal savings, funding commitments, or capital you have to launch. Include costs for development, manufacturing, inventory, equipment, marketing, and initial operations.",
     "validation": {
       "min": 0,
       "max": 10000000
+    }
+  },
+  {
+    "id": "current_market_spending",
+    "type": "textarea",
+    "text": "How much do your target customers currently spend on similar solutions, products, or services in your market? (Optional - helps understand pricing opportunity)",
+    "required": false,
+    "placeholder": "e.g., Small businesses typically spend $500-2000 annually on business consultants and market research, or $50-100/month on SaaS tools for this purpose...",
+    "help_text": "Market research about current customer spending - helps assess willingness to pay and competitive pricing.",
+    "validation": {
+      "minLength": 20,
+      "maxLength": 400
     }
   },
   {

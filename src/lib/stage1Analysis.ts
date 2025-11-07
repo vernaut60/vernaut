@@ -76,7 +76,7 @@ interface RiskAnalysis {
     category: string
     why_it_matters: string
     mitigation_steps: string[]
-    timeline?: string
+    timeline: 'Before starting' | 'During validation' | 'During MVP development' | 'Before launch' | 'Post-launch'
   }>
   demo_comparison?: {
     has_demo: boolean
@@ -144,38 +144,108 @@ function extractCompanyName(title: string, url: string): string {
   }
 }
 
-// Normalize URL for deduplication
-function normalizeUrl(url: string): string {
+
+// Helper: Check if a URL is from a news/article site
+function isNewsSite(url: string | undefined): boolean {
+  if (!url) return false
+  
   try {
     const parsed = new URL(url)
-    // Remove www., keep just hostname + path (no protocol, no trailing slash)
-    return parsed.hostname.replace(/^www\./, '').toLowerCase() + 
-           parsed.pathname.replace(/\/$/, '')
+    const hostname = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    const rootDomain = hostname.split('.')[0]
+    
+    const newsSites = [
+      'techcrunch', 'forbes', 'businessinsider', 'theverge', 'wired',
+      'reuters', 'bloomberg', 'cnbc', 'venturebeat', 'mashable',
+      'engadget', 'arstechnica', 'zdnet', 'cnet', 'medium',
+      'linkedin', 'twitter', 'facebook', 'reddit', 'quora'
+    ]
+    
+    return newsSites.includes(rootDomain)
   } catch {
-    // If URL parsing fails, normalize manually
-    return url.toLowerCase()
-      .replace(/^(https?:\/\/)?(www\.)?/, '') // Remove protocol and www
-      .replace(/\/$/, '') // Remove trailing slash
+    return false
   }
 }
 
-// Deduplicate competitors by website (enhanced)
-function deduplicateByWebsite(competitors: CompetitorCandidate[]): CompetitorCandidate[] {
-  const seen = new Set<string>()
-  const deduplicated: CompetitorCandidate[] = []
+// Deduplicate competitors by company name AND website (improved logic)
+function deduplicateCompetitors(competitors: CompetitorCandidate[]): CompetitorCandidate[] {
+  const seen = new Map<string, CompetitorCandidate>()
 
   for (const competitor of competitors) {
-    // Normalize the website URL for comparison
-    const key = competitor.website 
-      ? normalizeUrl(competitor.website)
-      : competitor.name.toLowerCase().replace(/\s+/g, '') // Remove spaces from name
+    // Normalize company name: lowercase, trim, but KEEP special chars like & and punctuation
+    const normalizedName = competitor.name.toLowerCase().trim().replace(/\s+/g, ' ')
     
-    if (!seen.has(key)) {
-      seen.add(key)
-      deduplicated.push(competitor)
+    // Extract domain if website exists (e.g., "stripe.com" from "https://www.stripe.com/products")
+    let rootDomain: string | null = null
+    let isActualCompanyWebsite = false
+    
+    if (competitor.website) {
+      try {
+        const url = new URL(competitor.website)
+        const hostname = url.hostname.replace(/^www\./, '').toLowerCase()
+        
+        // Extract root domain (e.g., "stripe" from "stripe.com")
+        const domainParts = hostname.split('.')
+        rootDomain = domainParts[0]
+        
+        // Check if this is likely the company's actual website (not a news article)
+        isActualCompanyWebsite = !isNewsSite(competitor.website)
+      } catch {
+        // Invalid URL, skip domain extraction
+      }
+    }
+
+    // Create deduplication key
+    // Strategy: Use the company name as the primary key
+    let dedupKey = normalizedName
+
+    // If this is NOT a news article, also check for domain-based matches
+    if (isActualCompanyWebsite && rootDomain) {
+      // Check if domain name closely matches company name
+      // Example: "stripe" domain matches "Stripe" or "Stripe Inc" company name
+      const companyNameCore = normalizedName
+        .replace(/\s+(inc|llc|ltd|corp|corporation|company|co|limited)\.?$/i, '') // Remove legal suffixes
+        .replace(/[^\w\s&]/g, '') // Remove punctuation but keep & and spaces
+        .replace(/\s+/g, '') // Remove spaces for comparison
+      
+      // If domain matches the core company name, use domain as key
+      // This catches: "Stripe Inc" from stripe.com and "Stripe" from techcrunch.com/stripe
+      if (companyNameCore.length >= 3 && rootDomain.length >= 3) {
+        // Only match if one is substring of other AND length difference is small
+        const lengthDiff = Math.abs(companyNameCore.length - rootDomain.length)
+        const minLength = Math.min(companyNameCore.length, rootDomain.length)
+        
+        // Require at least 4 character match and small length difference
+        if ((companyNameCore.includes(rootDomain) || rootDomain.includes(companyNameCore)) && 
+            lengthDiff <= 4 && minLength >= 4) {
+          dedupKey = rootDomain // Use domain as canonical key
+        }
+      }
+    }
+
+    // Check if we've seen this company before
+    if (seen.has(dedupKey)) {
+      const existing = seen.get(dedupKey)!
+      const existingIsNews = isNewsSite(existing.website)
+      
+      // Prioritize actual company websites over news articles
+      if (isActualCompanyWebsite && existingIsNews) {
+        // Current entry is actual company website, replace the news article
+        console.log(`[STAGE1] Replacing news article with company website: ${competitor.name} (${competitor.website})`)
+        seen.set(dedupKey, competitor)
+      } else {
+        // Keep existing entry, skip this one
+        console.log(`[STAGE1] Skipping duplicate: ${competitor.name} (${competitor.website}) - already have: ${existing.name}`)
+      }
+    } else {
+      // First time seeing this company
+      seen.set(dedupKey, competitor)
     }
   }
 
+  const deduplicated = Array.from(seen.values())
+  console.log(`[STAGE1] Deduplicated ${competitors.length} → ${deduplicated.length} competitors`)
+  
   return deduplicated
 }
 
@@ -183,7 +253,6 @@ function deduplicateByWebsite(competitors: CompetitorCandidate[]): CompetitorCan
 async function searchCompetitorsWithSerper(
   ideaText: string,
   solution: string,
-  _category: string = 'software',
   wizardAnswers?: Record<string, unknown>
 ): Promise<CompetitorCandidate[]> {
   const serperApiKey = getSerperApiKey()
@@ -287,8 +356,8 @@ async function searchCompetitorsWithSerper(
     }
   }
 
-  // Deduplicate by website
-  return deduplicateByWebsite(competitors)
+  // Deduplicate by company name and website
+  return deduplicateCompetitors(competitors)
 }
 
 // Helper: Analyze a single batch of competitors
@@ -687,7 +756,8 @@ function formatWizardAnswersForAnalysis(
 
 // Extract key insights from wizard answers
 function extractKeyInsights(wizardAnswers: Record<string, unknown>): {
-  budget?: number
+  startupBudget?: number           // Changed: What founder has to launch
+  marketSpending?: string          // New: What customers currently pay
   technicalCapability?: string
   targetMarket?: string
   existingSolutions?: string
@@ -696,7 +766,8 @@ function extractKeyInsights(wizardAnswers: Record<string, unknown>): {
   timeline?: string
 } {
   const insights: {
-    budget?: number
+    startupBudget?: number
+    marketSpending?: string
     technicalCapability?: string
     targetMarket?: string
     existingSolutions?: string
@@ -705,20 +776,45 @@ function extractKeyInsights(wizardAnswers: Record<string, unknown>): {
     timeline?: string
   } = {}
 
-  // Common question IDs (these may vary based on AI-generated questions)
   const answerKeys = Object.keys(wizardAnswers).map(k => k.toLowerCase())
 
-  // Extract budget
-  const budgetKey = answerKeys.find(k => k.includes('budget') || k.includes('funding'))
-  if (budgetKey) {
-    const budgetValue = wizardAnswers[budgetKey]
-    if (typeof budgetValue === 'number') {
-      insights.budget = budgetValue
-    } else if (typeof budgetValue === 'string') {
-      const numMatch = budgetValue.match(/\d+/)
-      if (numMatch) {
-        insights.budget = parseInt(numMatch[0], 10)
+  // Extract STARTUP budget (what THEY have to launch the business)
+  // Works for: SaaS, physical products, services, physical locations
+  const startupBudgetKey = answerKeys.find(k => 
+    (k.includes('startup') && k.includes('budget')) ||
+    (k.includes('available') && k.includes('budget')) ||
+    (k.includes('launch') && k.includes('budget')) ||
+    (k.includes('development') && k.includes('budget')) ||
+    (k === 'budget' && !k.includes('customer') && !k.includes('market'))
+  )
+  
+  if (startupBudgetKey) {
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === startupBudgetKey)
+    if (originalKey) {
+      const budgetValue = wizardAnswers[originalKey]
+      if (typeof budgetValue === 'number') {
+        insights.startupBudget = budgetValue
+      } else if (typeof budgetValue === 'string') {
+        const numMatch = budgetValue.match(/\d+/)
+        if (numMatch) {
+          insights.startupBudget = parseInt(numMatch[0], 10)
+        }
       }
+    }
+  }
+
+  // Extract MARKET spending (what customers CURRENTLY pay competitors)
+  const marketSpendingKey = answerKeys.find(k =>
+    (k.includes('customer') && k.includes('budget')) ||
+    (k.includes('market') && k.includes('spending')) ||
+    (k.includes('customer') && k.includes('spend')) ||
+    (k.includes('current') && k.includes('market'))
+  )
+  
+  if (marketSpendingKey) {
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === marketSpendingKey)
+    if (originalKey) {
+      insights.marketSpending = String(wizardAnswers[originalKey])
     }
   }
 
@@ -727,15 +823,23 @@ function extractKeyInsights(wizardAnswers: Record<string, unknown>): {
     k => k.includes('technical') || k.includes('tech') || k.includes('capability') || k.includes('skill')
   )
   if (techKey) {
-    insights.technicalCapability = String(wizardAnswers[techKey])
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === techKey)
+    if (originalKey) {
+      insights.technicalCapability = String(wizardAnswers[originalKey])
+    }
   }
 
   // Extract target market
   const marketKey = answerKeys.find(
-    k => k.includes('market') || k.includes('geographic') || k.includes('location') || k.includes('region')
+    k => (k.includes('target') && k.includes('market')) || 
+         k.includes('geographic') || 
+         (k.includes('market') && !k.includes('spending'))
   )
   if (marketKey) {
-    insights.targetMarket = String(wizardAnswers[marketKey])
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === marketKey)
+    if (originalKey) {
+      insights.targetMarket = String(wizardAnswers[originalKey])
+    }
   }
 
   // Extract existing solutions
@@ -743,7 +847,10 @@ function extractKeyInsights(wizardAnswers: Record<string, unknown>): {
     k => k.includes('existing') || k.includes('competitor') || k.includes('alternative') || k.includes('current')
   )
   if (solutionsKey) {
-    insights.existingSolutions = String(wizardAnswers[solutionsKey])
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === solutionsKey)
+    if (originalKey) {
+      insights.existingSolutions = String(wizardAnswers[originalKey])
+    }
   }
 
   // Extract regulatory requirements
@@ -751,15 +858,21 @@ function extractKeyInsights(wizardAnswers: Record<string, unknown>): {
     k => k.includes('regulatory') || k.includes('regulation') || k.includes('compliance') || k.includes('certification')
   )
   if (regulatoryKey) {
-    insights.regulatoryRequirements = String(wizardAnswers[regulatoryKey])
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === regulatoryKey)
+    if (originalKey) {
+      insights.regulatoryRequirements = String(wizardAnswers[originalKey])
+    }
   }
 
   // Extract team size
   const teamKey = answerKeys.find(k => k.includes('team') || k.includes('people') || k.includes('founder'))
   if (teamKey) {
-    const teamValue = wizardAnswers[teamKey]
-    if (typeof teamValue === 'number') {
-      insights.teamSize = teamValue
+    const originalKey = Object.keys(wizardAnswers).find(k => k.toLowerCase() === teamKey)
+    if (originalKey) {
+      const teamValue = wizardAnswers[originalKey]
+      if (typeof teamValue === 'number') {
+        insights.teamSize = teamValue
+      }
     }
   }
 
@@ -822,7 +935,8 @@ FOUNDER'S DETAILED ANSWERS (USE THESE TO PERSONALIZE YOUR ANALYSIS):
 ${formattedAnswers}
 
 KEY INSIGHTS EXTRACTED:
-${keyInsights.budget ? `- Budget Available: $${keyInsights.budget.toLocaleString()}` : ''}
+${keyInsights.startupBudget ? `- Startup Budget (What You Have to Launch): $${keyInsights.startupBudget.toLocaleString()}` : ''}
+${keyInsights.marketSpending ? `- Market Spending Intelligence (What Customers Currently Pay): ${keyInsights.marketSpending}` : ''}
 ${keyInsights.technicalCapability ? `- Technical Capability: ${keyInsights.technicalCapability}` : ''}
 ${keyInsights.targetMarket ? `- Target Market: ${keyInsights.targetMarket}` : ''}
 ${keyInsights.existingSolutions ? `- Existing Solutions in Market: ${keyInsights.existingSolutions.substring(0, 200)}...` : ''}
@@ -831,13 +945,52 @@ ${keyInsights.teamSize ? `- Team Size: ${keyInsights.teamSize}` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+⚠️ CRITICAL: DO NOT CONFUSE STARTUP BUDGET WITH MARKET SPENDING ⚠️
+
+There are TWO COMPLETELY DIFFERENT budget concepts in the data above:
+
+1. **STARTUP BUDGET** = Money the FOUNDER has to LAUNCH the business
+   - This is THEIR money to build/launch/operate
+   - Use THIS for ALL risk scoring (execution, viability, etc.)
+   - Examples: "$10,000 available", "$50,000 seed funding"
+   - Use for: "Can they build this?", "Do they have runway?", "Execution feasibility?"
+   
+2. **MARKET SPENDING INTELLIGENCE** = What CUSTOMERS currently pay for similar solutions
+   - This is MARKET RESEARCH about customer spending habits
+   - Use ONLY to understand competitive pricing landscape
+   - DO NOT assume this is the founder's pricing
+   - DO NOT criticize as "unvalidated pricing" - it's market research, not their pricing!
+   - Examples: "Customers spend $500-1000 on consultants", "Market pays $50/month for SaaS"
+   - Use for: Understanding willingness-to-pay, competitive context, pricing opportunity
+
+**WRONG Analysis Examples (NEVER DO THIS):**
+❌ "$500 budget severely limits marketing and development" (when they actually have $10,000)
+❌ "Assumption that entrepreneurs will pay $500-1000 is unvalidated" (that's market research, not their pricing!)
+❌ "$500 only covers API costs for 2 months" (wrong number - using market spending instead of startup budget!)
+❌ "Insufficient budget for full product development" (while referencing wrong budget number)
+
+**CORRECT Analysis Examples (DO THIS):**
+✅ "$10,000 startup budget covers Serper API ($50-100/month), Claude API ($200-400/month), hosting ($20/month), leaving $8,000 for marketing"
+✅ "Market research shows customers spend $500-1000 on alternatives, indicating willingness to pay premium prices. Founder's actual pricing strategy needs validation through customer interviews."
+✅ "Strong technical skills + $10,000 startup budget = can build MVP without hiring developers, extending runway"
+✅ "$10,000 provides 6-12 months runway at part-time pace (20-30 hrs/week) for validation and iteration"
+
+**VERIFICATION CHECKLIST:**
+Before finalizing your analysis, verify:
+□ All budget mentions use the STARTUP BUDGET number (${keyInsights.startupBudget ? `$${keyInsights.startupBudget.toLocaleString()}` : 'unknown'})
+□ Market spending is ONLY used for competitive context, never for execution feasibility
+□ No statements like "assumption that they'll charge $X" when X comes from market research
+□ Execution difficulty score reflects their ACTUAL startup budget, not market data
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 CRITICAL: Use the founder's answers to personalize EVERY aspect of your analysis:
 
 1. **EXECUTION DIFFICULTY:**
    ${keyInsights.technicalCapability ? `- Their technical capability: "${keyInsights.technicalCapability}"` : '- Consider their technical background'}
-   ${keyInsights.budget ? `- Their budget: $${keyInsights.budget.toLocaleString()} - adjust execution difficulty based on this` : '- Consider their available resources'}
+   ${keyInsights.startupBudget ? `- Their STARTUP budget: $${keyInsights.startupBudget.toLocaleString()} - use THIS for execution difficulty scoring` : '- Consider their available resources'}
    ${keyInsights.teamSize ? `- Team size: ${keyInsights.teamSize} people` : ''}
-   → Score execution_difficulty based on THEIR actual capability, not generic assumptions
+   → Score execution_difficulty based on THEIR actual capability and STARTUP BUDGET (not market spending!)
 
 2. **MARKET TIMING:**
    ${keyInsights.targetMarket ? `- Their target market: "${keyInsights.targetMarket}"` : ''}
@@ -850,19 +1003,22 @@ CRITICAL: Use the founder's answers to personalize EVERY aspect of your analysis
    → Rate competition based on what THEY identified AND the actual competitors discovered
 
 4. **BUSINESS VIABILITY:**
-   ${keyInsights.budget ? `- Their budget: $${keyInsights.budget.toLocaleString()} - consider how viable their monetization model is given this constraint` : ''}
+   ${keyInsights.startupBudget ? `- Their STARTUP budget: $${keyInsights.startupBudget.toLocaleString()} - assess runway and scaling viability based on THIS` : ''}
+   ${keyInsights.marketSpending ? `- Market spending intel: ${keyInsights.marketSpending} (use for competitive context, NOT as their pricing)` : ''}
    ${keyInsights.regulatoryRequirements ? `- Regulatory requirements: ${keyInsights.regulatoryRequirements.substring(0, 150)}...` : ''}
-   → Assess viability based on THEIR constraints and context
+   → Assess viability based on THEIR actual startup budget and constraints
+   → Market spending is CONTEXT about customers, not their pricing strategy
 
 5. **RISK MITIGATION:**
    - Use their answers to suggest SPECIFIC, ACTIONABLE mitigation steps
-   - Reference their actual constraints (budget, technical capability, market)
+   - Reference their actual STARTUP budget, technical capability, and market constraints
    - Provide timeline estimates based on their context
 
 6. **SCORE FACTORS:**
    - Highlight factors from THEIR answers that improve/diminish the score
-   - Example: "Strong technical background reduces execution risk" if they have tech skills
-   - Example: "Limited budget increases viability concerns" if budget is tight
+   - Example: "Strong technical background + $10,000 budget reduces execution risk"
+   - Example: "Market research shows $500-1000 spending, indicating willingness to pay premium prices"
+   - NEVER say: "$500 budget limits development" (use correct startupBudget number!)
 
 ${hasDemo ? `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -981,12 +1137,46 @@ Provide a complete business analysis:
    Risk level: "Low" (0-3.9), "Medium" (4-6.9), or "High" (7-10)
    
    Top 3 risks with:
-   - title
-   - severity (number 1-10)
-   - category
-   - why_it_matters
-   - mitigation_steps (array)
-   - timeline (optional)
+   - title: Brief, clear title of the risk
+   - severity: number 1-10 (how critical is this risk)
+   - category: "Business Viability" | "Market Timing" | "Competition" | "Execution"
+   - why_it_matters: 1-2 sentences explaining the impact
+   - mitigation_steps: array of 2-4 specific, actionable steps to address this risk
+   - timeline: When to execute the mitigation_steps above (REQUIRED)
+   
+   **TIMELINE FIELD - Use these EXACT labels:**
+   
+   "Before starting" 
+     - Use when: Risk blocks starting or requires decision before ANY action
+     - Example: "No monetization model defined" → Must decide pricing strategy before starting
+     - This tells founder: "Resolve this before you do anything else"
+     
+   "During validation"
+     - Use when: Mitigation requires customer interviews, market testing, or demand validation
+     - Example: "Validate willingness-to-pay with 30 farmers" → Done during customer discovery phase
+     - This tells founder: "Handle this while you're testing with customers"
+     
+   "During MVP development"
+     - Use when: Mitigation happens while building the product
+     - Example: "Hire technical team" or "Build prototype" → Done during development phase
+     - This tells founder: "Address this while you're building"
+     
+   "Before launch"
+     - Use when: Must be resolved before going live but can be worked on during development
+     - Example: "Secure distribution partnerships" → Finalize before launch
+     - This tells founder: "This must be ready before you go live"
+     
+   "Post-launch"
+     - Use when: Can only be addressed after having customers/data
+     - Example: "Monitor CAC and optimize based on data" → Ongoing after launch
+     - This tells founder: "Track this once you have users"
+   
+   **CRITICAL RULES:**
+   - Timeline tells the founder WHEN in their startup journey to execute the mitigation_steps
+   - Choose the EARLIEST stage where mitigation can realistically begin
+   - Use EXACTLY these labels (don't invent variations like "Pre-validation" or "Month 1")
+   - Every risk MUST have a timeline (this is not optional)
+   - The timeline should match the nature of the mitigation steps
    
    ${hasDemo ? `
    Demo Comparison:
@@ -1119,7 +1309,7 @@ Return ONLY a valid JSON object with this exact structure:
         "category": "Competition",
         "why_it_matters": "...",
         "mitigation_steps": ["...", "..."],
-        "timeline": "Month 1-2"
+        "timeline": "During validation"
       }
     ]
     ${hasDemo ? `,
@@ -1186,7 +1376,7 @@ Do not include markdown code blocks, only return the JSON object.
   const response = await callAnthropicWithRetry(
     () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 4000,
+      max_tokens: 8000,
       temperature: 0.5,
       messages: [{ role: 'user', content: prompt }]
     }),
@@ -1232,6 +1422,33 @@ Do not include markdown code blocks, only return the JSON object.
     } catch (parseError) {
       console.error('[STAGE1] Failed to parse Stage 1 analysis JSON:', parseError)
       // parsed remains {} - will use default values below
+    }
+  }
+
+  // Validate that AI used correct budget (after parsing analysis)
+  if (keyInsights.startupBudget && parsed?.risk_analysis?.explanations) {
+    const allText = JSON.stringify(parsed.risk_analysis.explanations) + 
+                    JSON.stringify(parsed.ai_insights)
+    
+    // Check if AI confused market spending with startup budget
+    if (keyInsights.marketSpending) {
+      const marketNumbers = keyInsights.marketSpending.match(/\$?(\d+)/g) || []
+      for (const num of marketNumbers) {
+        const amount = parseInt(num.replace(/\D/g, ''), 10)
+        // If market spending is small but startup budget is large, check for confusion
+        if (amount < 5000 && keyInsights.startupBudget >= 5000) {
+          if (allText.includes(`$${amount} budget`) || allText.includes(`\$${amount} budget`)) {
+            console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+            console.warn(`⚠️  BUDGET CONFUSION DETECTED`)
+            console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+            console.warn(`AI may have used market spending ($${amount}) instead of startup budget ($${keyInsights.startupBudget})`)
+            console.warn(`Market spending: ${keyInsights.marketSpending}`)
+            console.warn(`Startup budget: $${keyInsights.startupBudget}`)
+            console.warn(`This indicates the prompt needs review`)
+            console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
+          }
+        }
+      }
     }
   }
 
@@ -1388,25 +1605,29 @@ export async function generateStage1Analysis(
         }
       : null
 
-    // Step 3: Generate problem/audience/solution/monetization if NULL
+    // Step 3: Generate problem/audience/solution/monetization from wizard answers
+    // Always regenerate from wizard answers if available (even if demo data exists)
+    // This ensures consistency with the full analysis context
     let problem = idea.problem
     let audience = idea.audience
     let solution = idea.solution
     let monetization = idea.monetization
 
-    const needsCoreFields = !problem || !audience || !solution || !monetization
-
-    if (needsCoreFields && idea.wizard_answers) {
-      console.log(`[STAGE1] Generating core fields from wizard answers`)
+    if (idea.wizard_answers && Object.keys(idea.wizard_answers as Record<string, unknown>).length > 0) {
+      console.log(`[STAGE1] Generating core fields from wizard answers (regenerating even if demo data exists)`)
       const coreFields = await generateCoreFieldsFromWizard(
         idea.idea_text || ideaText,
         (idea.wizard_answers as Record<string, unknown>) || {},
         anthropic
       )
-      problem = problem || coreFields.problem
-      audience = audience || coreFields.audience
-      solution = solution || coreFields.solution
-      monetization = monetization || coreFields.monetization
+      // Always use generated values from wizard (overwrites demo data)
+      problem = coreFields.problem
+      audience = coreFields.audience
+      solution = coreFields.solution
+      monetization = coreFields.monetization
+    } else {
+      // Fallback: Only use existing values if no wizard answers available
+      console.log(`[STAGE1] No wizard answers available, using existing core fields if present`)
     }
 
     // Step 4: Discover competitors (Serper + Claude) - BEFORE analysis so we can include them in the prompt
@@ -1414,15 +1635,12 @@ export async function generateStage1Analysis(
     let competitors: AnalyzedCompetitor[] = []
 
     try {
-      // Extract category from idea or use default
-      const category = 'software' // Could be extracted from idea or wizard answers
       const wizardAnswers = (idea.wizard_answers as Record<string, unknown>) || {}
 
       // Layer 1: Serper search with wizard context
       const searchResults = await searchCompetitorsWithSerper(
         idea.idea_text || ideaText,
         solution || idea.idea_text || ideaText,
-        category,
         wizardAnswers
       )
 

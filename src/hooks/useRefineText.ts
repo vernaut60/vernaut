@@ -300,6 +300,7 @@ export function useRefineText({
         timeoutId = null
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idea, hasAppliedRefined]) // Removed refinedPreview to prevent infinite loop
 
   return {

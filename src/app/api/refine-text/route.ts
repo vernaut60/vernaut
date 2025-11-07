@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import crypto from "crypto";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { validateIdeaIsNotVague } from "@/lib/ideaValidation";
 
 // Rate limiting configuration (server + DB-backed)
@@ -101,6 +102,50 @@ export async function POST(request: NextRequest) {
     // Allow unauthenticated users (guests) for demo purposes
     // Rate limiting will use IP address for guests, user_id for authenticated users
     const userId = user?.id || null;
+    const isGuest = !userId;
+    
+    // Generate deterministic UUID from IP for guest users (for rate limiting)
+    // Uses UUID v5-like approach: hash IP address to create consistent UUID
+    const getGuestUserId = (ip: string): string => {
+      // Create a deterministic UUID from IP address
+      // Use a fixed namespace UUID for guest users (DNS namespace)
+      const namespace = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+      
+      // Hash namespace + IP using SHA-1 (required for UUID v5)
+      const hash = crypto.createHash('sha1')
+        .update(Buffer.from(namespace.replace(/-/g, ''), 'hex'))
+        .update(ip)
+        .digest();
+      
+      // Convert to UUID v5 format (RFC 4122)
+      // Set version (5) and variant bits
+      const bytes = Array.from(hash);
+      bytes[6] = (bytes[6] & 0x0f) | 0x50; // Version 5
+      bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 10
+      
+      // Convert to UUID string format (8-4-4-4-12)
+      const hex = Buffer.from(bytes).toString('hex');
+      return [
+        hex.substring(0, 8),
+        hex.substring(8, 12),
+        hex.substring(12, 16),
+        hex.substring(16, 20),
+        hex.substring(20, 32)
+      ].join('-');
+    };
+    
+    // Use user ID if authenticated, otherwise generate deterministic UUID from IP
+    const rateLimitUserId = userId || getGuestUserId(clientIp);
+    
+    // For guests, use service role key to bypass RLS for cache and rate limit operations
+    // For authenticated users, use regular client (RLS allows their own data)
+    const supabaseForDbOps = isGuest && process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY,
+          { auth: { persistSession: false } }
+        )
+      : supabase;
 
     // Step 2: Content type validation
     const contentType = request.headers.get("content-type") || "";
@@ -189,23 +234,16 @@ export async function POST(request: NextRequest) {
     const inputHash = crypto.createHash('sha256').update(`${identifier}::${normalizedText}`).digest('hex');
 
     // Step 5: De-dup cache (60s TTL)
-    // For guests, cache by IP; for authenticated users, cache by user_id
+    // Use rateLimitUserId (deterministic UUID for guests, actual UUID for authenticated users)
+    // Use supabaseForDbOps to bypass RLS for guests
     const ttlIso = new Date(Date.now() - 60_000).toISOString();
-    const cacheQuery = supabase
+    const { data: cached } = await supabaseForDbOps
       .from('refine_cache')
       .select('result, created_at')
+      .eq('user_id', rateLimitUserId)
       .eq('input_hash', inputHash)
-      .gt('created_at', ttlIso);
-    
-    if (userId) {
-      cacheQuery.eq('user_id', userId);
-    } else {
-      // For guests, use a special guest user_id or IP-based identifier
-      // Since refine_cache requires user_id, we'll use a guest identifier
-      cacheQuery.eq('user_id', `guest:${clientIp}`);
-    }
-    
-    const { data: cached } = await cacheQuery.maybeSingle();
+      .gt('created_at', ttlIso)
+      .maybeSingle();
 
     interface CachedResult {
       result?: {
@@ -224,9 +262,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 6: DB-backed rate limit (per user or per IP for guests)
-    // For guests, use IP-based identifier; for authenticated users, use user_id
-    const rateLimitUserId = userId || `guest:${clientIp}`;
-    const { data: rlData, error: rlError } = await supabase.rpc('check_rate_limit', {
+    // rateLimitUserId is already set above (deterministic UUID for guests, actual UUID for authenticated users)
+    // Use supabaseForDbOps to bypass RLS for guests (RPC uses SECURITY DEFINER but client still needs proper permissions)
+    const { data: rlData, error: rlError } = await supabaseForDbOps.rpc('check_rate_limit', {
       p_user_id: rateLimitUserId,
       p_endpoint: 'refine-text',
       p_limit: RATE_LIMIT_MAX,
@@ -392,8 +430,9 @@ Idea to refine: ${rawIdea}`
     }
 
     // Step 11: Store in cache (upsert) & Success logging
+    // Use supabaseForDbOps to bypass RLS for guests
     try {
-      await supabase
+      await supabaseForDbOps
         .from('refine_cache')
         .upsert({ user_id: rateLimitUserId, input_hash: inputHash, result: { refinedIdea }, created_at: new Date().toISOString() }, { onConflict: 'user_id,input_hash' });
     } catch (err) {

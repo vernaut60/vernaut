@@ -39,6 +39,28 @@ export default function IdeaInput({ problem, audience, solution, monetization, h
         </p>
       </motion.div>
 
+      {/* Personalization confirmation message - show after full analysis (when hasDemoData is false) */}
+      {!hasDemoData && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="mb-6 bg-gradient-to-r from-[#4361EE]/10 to-[#7209B7]/10 border border-[#4361EE]/20 rounded-xl p-4"
+        >
+          <div className="flex items-start gap-3">
+            <span className="text-xl flex-shrink-0">✨</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-white mb-1">
+                Analysis personalized based on your answers
+              </p>
+              <p className="text-xs text-neutral-300 leading-relaxed">
+                These values were refined using your specific budget, market, and approach for more accurate insights.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Demo Input Cards */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Problem */}

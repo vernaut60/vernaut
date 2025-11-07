@@ -328,7 +328,7 @@ export default function IdeaDetailPage() {
     }
 
     // Hero data
-    const heroData = {
+  const heroData = {
       ideaTitle: idea.title || idea.idea_text.substring(0, 50) || 'Untitled Idea',
       score: idea.score || 0,
       riskScore: idea.risk_score || 0,
@@ -344,51 +344,51 @@ export default function IdeaDetailPage() {
     // Backend now provides ALL scores as RISK scores (higher = higher risk)
     // The component expects: higher score = higher risk (red), lower score = lower risk (green)
     // NO inversion needed - all scores are already risk scores
-    const riskCategories = [
-      {
-        name: "Market Timing",
+  const riskCategories = [
+    {
+      name: "Market Timing",
         score: categoryScores.market_timing ?? 5.0,
-        maxScore: 10,
-        description: "Market readiness and timing factors",
-        color: "text-yellow-400",
+      maxScore: 10,
+      description: "Market readiness and timing factors",
+      color: "text-yellow-400",
         change: undefined, // Demo comparison not implemented
         reason: riskAnalysis?.explanations?.market_timing ?? 'Analysis pending'
-      },
-      {
-        name: "Competition",
+    },
+    {
+      name: "Competition",
         // Backend: competition_level is already a risk score (higher = higher risk)
         score: categoryScores.competition_level ?? 5.0,
-        maxScore: 10,
-        description: "Competitive landscape and barriers",
-        color: "text-orange-400",
+      maxScore: 10,
+      description: "Competitive landscape and barriers",
+      color: "text-orange-400",
         change: undefined,
         reason: riskAnalysis?.explanations?.competition_level ?? 'Analysis pending'
-      },
-      {
-        name: "Business Viability",
+    },
+    {
+      name: "Business Viability",
         // Backend: business_viability is now a risk score (higher = higher risk)
         score: categoryScores.business_viability ?? 5.0,
-        maxScore: 10,
-        description: "Revenue model and sustainability",
-        color: "text-green-400",
+      maxScore: 10,
+      description: "Revenue model and sustainability",
+      color: "text-green-400",
         change: undefined,
         reason: riskAnalysis?.explanations?.business_viability ?? 'Analysis pending'
-      },
-      {
-        name: "Execution Risk",
+    },
+    {
+      name: "Execution Risk",
         // Backend: execution_difficulty is already a risk score (higher = higher risk)
         score: categoryScores.execution_difficulty ?? 5.0,
-        maxScore: 10,
-        description: "Technical and operational feasibility",
-        color: "text-blue-400",
+      maxScore: 10,
+      description: "Technical and operational feasibility",
+      color: "text-blue-400",
         change: undefined,
         reason: riskAnalysis?.explanations?.execution_difficulty ?? 'Analysis pending'
-      }
-    ]
+    }
+  ]
 
     // Top risks
     const topRisks = (riskAnalysis?.top_risks || []).map((risk, index) => ({
-      ...risk,
+    ...risk,
       id: `risk-${index}`
     }))
 
@@ -473,7 +473,7 @@ export default function IdeaDetailPage() {
       
       return {
         id: comp.id || `competitor-${index}`,
-        name: comp.name,
+    name: comp.name,
         website: comp.website || '#',
         pricing: pricing,
         features: comp.key_features || [],
