@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import NewIdeaModal from './NewIdeaModal'
+import DeleteIdeaButton from './DeleteIdeaButton'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import { useToast } from '@/contexts/ToastContext'
@@ -71,6 +72,7 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
   const [ideasError, setIdeasError] = useState<string | null>(null)
   const [isNewIdeaModalOpen, setIsNewIdeaModalOpen] = useState(false)
   const [generatingQuestionsFor, setGeneratingQuestionsFor] = useState<Set<string>>(new Set())
+  const [showHandoffLimitBanner, setShowHandoffLimitBanner] = useState(false)
   const hasInitialized = useRef(false)
   const pollIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
   const pollAttemptsRef = useRef<Map<string, number>>(new Map())
@@ -134,20 +136,65 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
       })
 
       if (!response.ok) {
-        // Continue polling on error (might be temporary)
+        // 404 means idea doesn't exist - stop polling and remove from state
+        if (response.status === 404) {
+          console.log(`[Dashboard] Idea ${idea.id} not found (404), stopping polling and removing from state`)
+          stopPollingForIdea(idea.id)
+          // Remove idea from state
+          setIdeas(prevIdeas => prevIdeas.filter(prevIdea => prevIdea.id !== idea.id))
+          return
+        }
+        
+        // Other HTTP errors (500, 503, etc.) - continue polling (might be temporary)
+        // Use exponential backoff for errors, but cap attempts to prevent infinite polling
+        const attempt = pollAttemptsRef.current.get(idea.id) || 0
+        const maxAttempts = 10 // Stop after 10 failed attempts
+        
+        if (attempt >= maxAttempts) {
+          console.warn(`[Dashboard] Stopping polling for idea ${idea.id} after ${maxAttempts} failed attempts`)
+          stopPollingForIdea(idea.id)
+          return
+        }
+        
+        const errorDelays = [5000, 10000, 15000, 20000] // Longer delays for errors
+        const baseDelay = errorDelays[Math.min(attempt, errorDelays.length - 1)]
+        const jitter = 0.8 + Math.random() * 0.4
+        const delay = Math.round(baseDelay * jitter)
+        
+        pollAttemptsRef.current.set(idea.id, attempt + 1)
+        
+        const interval = setTimeout(() => pollIdeaStatus(idea), delay)
+        pollIntervalsRef.current.set(idea.id, interval)
         return
       }
 
       const data = await response.json()
       
+      // If API returns success: false with "not found" message, stop polling
+      if (!data.success && data.message?.toLowerCase().includes('not found')) {
+        console.log(`[Dashboard] Idea ${idea.id} not found (API response), stopping polling and removing from state`)
+        stopPollingForIdea(idea.id)
+        setIdeas(prevIdeas => prevIdeas.filter(prevIdea => prevIdea.id !== idea.id))
+        return
+      }
+      
       if (data.success && data.idea) {
-        // Check if status changed
-        if (data.idea.status === 'complete' || data.idea.status === 'stage1_failed') {
-          // Status changed - update the idea in state
+        const newStatus = data.idea.status
+        const currentStatus = idea.status
+        
+        // Handle status transitions that should stop polling
+        if (newStatus === 'complete' || newStatus === 'stage1_failed') {
+          // Analysis complete - update the idea in state
           setIdeas(prevIdeas => 
             prevIdeas.map(prevIdea => 
               prevIdea.id === idea.id 
-                ? { ...prevIdea, status: data.idea.status, score: data.idea.score, risk_score: data.idea.risk_score }
+                ? { 
+                    ...prevIdea, 
+                    status: newStatus, 
+                    score: data.idea.score ?? prevIdea.score, 
+                    risk_score: data.idea.risk_score ?? prevIdea.risk_score,
+                    risk_level: data.idea.risk_level ?? prevIdea.risk_level
+                  }
                 : prevIdea
             )
           )
@@ -156,11 +203,51 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
           return
         }
 
-        // Still generating, continue polling
-        if (data.idea.status === 'generating_stage1') {
+        // Handle transition from generating_questions to questions_ready
+        if (currentStatus === 'generating_questions' && newStatus === 'questions_ready') {
+          // Questions are ready - update the idea with all relevant fields
+          setIdeas(prevIdeas => 
+            prevIdeas.map(prevIdea => 
+              prevIdea.id === idea.id 
+                ? { 
+                    ...prevIdea, 
+                    status: newStatus,
+                    total_questions: data.idea.total_questions ?? prevIdea.total_questions,
+                    current_step: data.idea.current_step ?? prevIdea.current_step ?? 0,
+                    updated_at: data.idea.updated_at ?? prevIdea.updated_at
+                  }
+                : prevIdea
+            )
+          )
+          // Stop polling for this idea (questions are ready)
+          stopPollingForIdea(idea.id)
+          return
+        }
+
+        // Continue polling for ideas that are still generating
+        if (newStatus === 'generating_stage1' || newStatus === 'generating_questions') {
+          // Update idea status if it changed (e.g., draft -> generating_questions)
+          // This ensures state is always in sync before continuing to poll
+          if (newStatus !== currentStatus) {
+            setIdeas(prevIdeas => 
+              prevIdeas.map(prevIdea => 
+                prevIdea.id === idea.id 
+                  ? { ...prevIdea, status: newStatus, updated_at: data.idea.updated_at ?? prevIdea.updated_at }
+                  : prevIdea
+              )
+            )
+          }
+          
           // Calculate next poll delay with exponential backoff
           const attempt = pollAttemptsRef.current.get(idea.id) || 0
-          const delays = [5000, 8000, 10000, 12000] // 5s, 8s, 10s, 12s (slower for dashboard)
+          
+          // Different delays for different statuses
+          // generating_questions: faster polling (questions usually ready in ~30s)
+          // generating_stage1: slower polling (analysis takes longer)
+          const delays = newStatus === 'generating_questions' 
+            ? [3000, 5000, 7000, 10000] // 3s, 5s, 7s, 10s (faster for questions)
+            : [5000, 8000, 10000, 12000] // 5s, 8s, 10s, 12s (slower for analysis)
+          
           const baseDelay = delays[Math.min(attempt, delays.length - 1)]
           // Add 20% jitter to reduce synchronized spikes
           const jitter = 0.8 + Math.random() * 0.4
@@ -168,24 +255,47 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
           
           pollAttemptsRef.current.set(idea.id, attempt + 1)
           
-          // Schedule next poll
-          const interval = setTimeout(() => pollIdeaStatus(idea), delay)
+          // Create updated idea object for next poll (use latest data from API)
+          const updatedIdea: Idea = {
+            ...idea,
+            status: newStatus,
+            updated_at: data.idea.updated_at ?? idea.updated_at
+          }
+          
+          // Schedule next poll with updated idea
+          const interval = setTimeout(() => pollIdeaStatus(updatedIdea), delay)
           pollIntervalsRef.current.set(idea.id, interval)
+        } else {
+          // Status changed to something we don't poll for - stop polling
+          stopPollingForIdea(idea.id)
         }
       }
     } catch (err) {
-      // Network error, continue polling
+      // Network error - continue polling with exponential backoff
       console.warn(`[Dashboard] Poll error for idea ${idea.id}, will retry:`, err)
+      
+      const attempt = pollAttemptsRef.current.get(idea.id) || 0
+      const errorDelays = [5000, 10000, 15000, 20000] // Longer delays for network errors
+      const baseDelay = errorDelays[Math.min(attempt, errorDelays.length - 1)]
+      const jitter = 0.8 + Math.random() * 0.4
+      const delay = Math.round(baseDelay * jitter)
+      
+      pollAttemptsRef.current.set(idea.id, attempt + 1)
+      
+      const interval = setTimeout(() => pollIdeaStatus(idea), delay)
+      pollIntervalsRef.current.set(idea.id, interval)
     }
   }, [stopPollingForIdea])
 
-  // Start polling for ideas with generating_stage1 status
+  // Start polling for ideas that are generating (questions or stage1 analysis)
   const startPollingForGeneratingIdeas = useCallback(() => {
     // Stop all existing polling first
     stopAllPolling()
     
-    // Find ideas that are generating
-    const generatingIdeas = ideas.filter(idea => idea.status === 'generating_stage1')
+    // Find ideas that are generating (questions or stage1 analysis)
+    const generatingIdeas = ideas.filter(idea => 
+      idea.status === 'generating_stage1' || idea.status === 'generating_questions'
+    )
     
     if (generatingIdeas.length === 0) return
 
@@ -247,6 +357,14 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
     }
   }
 
+  // Handle successful idea deletion
+  const handleIdeaDeleted = useCallback(async () => {
+    // Refresh ideas list after deletion
+    await fetchUserIdeas()
+    // Also hide handoff limit banner if it was showing (user might have deleted an idea to make room)
+    setShowHandoffLimitBanner(false)
+  }, [])
+
   // Get user email and ideas on component mount
   useEffect(() => {
     if (hasInitialized.current) return
@@ -282,9 +400,21 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
       if (hasGuestSession) {
         // Set up listener for handoff completion (in case user just signed up)
         // But don't block on it - fetch ideas immediately
-        const handleHandoffComplete = () => {
+        const handleHandoffComplete = (event: Event) => {
+          const customEvent = event as CustomEvent<{ ideas_transferred: number; limit_reached: boolean }>
+          const detail = customEvent.detail || { ideas_transferred: 0, limit_reached: false }
+          
           // Handoff completed - refetch ideas to include transferred guest idea
           fetchUserIdeas()
+          
+          // Show banner if limit was reached
+          if (detail.limit_reached) {
+            setShowHandoffLimitBanner(true)
+          } else if (detail.ideas_transferred > 0) {
+            // Show success toast if idea was transferred
+            addToast(`✅ Your demo idea has been transferred!`, 'success')
+          }
+          
           // Clear the session ID after successful handoff
           localStorage.removeItem('guest-session-id')
         }
@@ -356,7 +486,8 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
     return () => {
       cleanupFn?.()
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // fetchUserIdeas and addToast are stable - intentionally excluded to prevent infinite loops
 
   // Start polling for generating ideas when ideas state changes
   useEffect(() => {
@@ -666,6 +797,44 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
             </motion.div>
           </motion.div>
 
+          {/* Handoff Limit Banner */}
+          {showHandoffLimitBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="mt-4 sm:mt-6"
+            >
+              <div className="surface-card p-4 sm:p-5 border border-amber-500/30 bg-gradient-to-r from-amber-900/20 via-amber-800/10 to-transparent">
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <svg className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-semibold text-amber-100 mb-1">
+                      Demo idea couldn&apos;t be transferred
+                    </h3>
+                    <p className="text-xs sm:text-sm text-amber-200/80 leading-relaxed">
+                      You&apos;ve reached the maximum of 5 ideas. Delete an existing idea to make room for your demo idea.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowHandoffLimitBanner(false)}
+                    className="flex-shrink-0 p-1 rounded-lg text-amber-300/70 hover:text-amber-200 hover:bg-amber-500/10 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    aria-label="Dismiss banner"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Ideas Grid Placeholder */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -743,17 +912,16 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                           className="group relative surface-card transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-pointer overflow-hidden"
                           onClick={() => router.push(`/ideas/${idea.id}`)}
                         >
-                          {/* Header with title and menu */}
+                          {/* Header with title and delete button */}
                           <div className="flex items-start justify-between p-4 pb-2">
                             <h3 className="text-[var(--color-text)] font-medium text-lg line-clamp-2 flex-1 pr-2">{idea.title}</h3>
-                            <button 
-                              className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors p-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                              </svg>
-                            </button>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <DeleteIdeaButton
+                                ideaId={idea.id}
+                                ideaTitle={idea.title}
+                                onDeleteSuccess={handleIdeaDeleted}
+                              />
+                            </div>
                           </div>
                           
                           {/* Divider line */}
@@ -929,17 +1097,16 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                         transition={{ duration: 0.5, delay: index * 0.1 }} 
                         className="group relative surface-card transition-all duration-300 hover:scale-[1.02] hover:shadow-lg overflow-hidden"
                       >
-                        {/* Header with title and menu */}
+                        {/* Header with title and delete button */}
                         <div className="flex items-start justify-between p-4 pb-2">
                           <h3 className="text-[var(--color-text)] font-medium text-lg line-clamp-2 flex-1 pr-2">{idea.title}</h3>
-                          <button 
-                            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors p-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                            </svg>
-                          </button>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <DeleteIdeaButton
+                              ideaId={idea.id}
+                              ideaTitle={idea.title}
+                              onDeleteSuccess={handleIdeaDeleted}
+                            />
+                          </div>
                         </div>
                         
                         {/* Divider line */}
@@ -949,7 +1116,19 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                         <div className="p-4 pt-3">
                           {/* Status badge - slightly bigger */}
                           <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-medium mb-3 ${statusConfig.badgeColor}`}>
-                            <span>{statusConfig.icon}</span>
+                            {statusConfig.icon === '🔄' ? (
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                                className="flex-shrink-0"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              </motion.div>
+                            ) : (
+                              <span>{statusConfig.icon}</span>
+                            )}
                             <span>{statusConfig.badge}</span>
                           </div>
                           
@@ -998,6 +1177,28 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                               : `Created: ${new Date(idea.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                             }
                           </div>
+                          
+                          {/* Personalization message - show when questions ready (wizard not completed) */}
+                          {idea.status === 'questions_ready' && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="mb-4 bg-gradient-to-r from-[#4361EE]/10 to-[#7209B7]/10 border border-[#4361EE]/20 rounded-lg p-3"
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className="text-lg flex-shrink-0">✨</span>
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-white mb-0.5">
+                                    Personalize your analysis
+                                  </p>
+                                  <p className="text-xs text-[var(--color-text-muted)]">
+                                    Your answers will personalize the analysis with your budget, market, and approach.
+                                  </p>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
                           
                           {/* Action button */}
                           <Button 

@@ -67,6 +67,30 @@ BEGIN
   END IF;
 END $$;
 
+-- Step 4.5: Add score and risk_score range constraints (after columns are added)
+DO $$
+BEGIN
+  -- Score range constraint (0-100)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conname = 'check_ideas_score_range'
+  ) THEN
+    ALTER TABLE ideas 
+    ADD CONSTRAINT check_ideas_score_range 
+    CHECK (score IS NULL OR (score >= 0 AND score <= 100));
+  END IF;
+
+  -- Risk score range constraint (0-10)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conname = 'check_ideas_risk_score_range'
+  ) THEN
+    ALTER TABLE ideas 
+    ADD CONSTRAINT check_ideas_risk_score_range 
+    CHECK (risk_score IS NULL OR (risk_score >= 0 AND risk_score <= 10));
+  END IF;
+END $$;
+
 -- Step 5: Enable RLS and create policies
 ALTER TABLE ideas ENABLE ROW LEVEL SECURITY;
 

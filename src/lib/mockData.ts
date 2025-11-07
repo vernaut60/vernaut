@@ -102,7 +102,7 @@ export const mockStage1Data = {
         "Offer free tier for first 10 vineyards to build social proof",
         "Emphasize AI-specific features (disease prediction) that legacy tools lack"
       ],
-      timeline: "Month 1-2"
+      timeline: "During validation"
     },
     {
       title: "Limited Agriculture Experience",
@@ -115,7 +115,7 @@ export const mockStage1Data = {
         "Join California wine grower associations (early access to network)",
         "Run weekly validation calls with 5 target customers"
       ],
-      timeline: "Month 1"
+      timeline: "Before starting"
     },
     {
       title: "Regulatory Compliance Complexity",
@@ -128,7 +128,7 @@ export const mockStage1Data = {
         "Focus on California only initially (single regulatory framework)",
         "Get organic certification consultant on advisory board"
       ],
-      timeline: "Month 2-3"
+      timeline: "During MVP development"
     }
   ],
   

@@ -103,7 +103,8 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
   const isOverLimit = characterCount > maxLength
   // Check if idea is too vague (showing guidance message instead of refined text)
   const isIdeaTooVague = refinedPreview && refinedPreview.startsWith('💡')
-  const canSubmit = idea.trim().length >= 10 && !isOverLimit && !isIdeaTooVague
+  // Disable button while refinement is loading (similar to demo section)
+  const canSubmit = idea.trim().length >= 10 && !isOverLimit && !isIdeaTooVague && !previewLoading
 
   // Auto-focus textarea when modal opens
   useEffect(() => {
@@ -287,7 +288,7 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
       
       addToast(userMessage, 'error')
     }
-  }, [idea, refinedPreview, session?.access_token, router, onClose, addToast])
+  }, [idea, session?.access_token, router, onClose, addToast])
 
   // Store refs for use in hook callbacks
   useEffect(() => {

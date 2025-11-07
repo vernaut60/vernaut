@@ -29,21 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return createClient()
   }, [])
 
-  // Session validation function
+  // Session validation function (checks expiry only - getUser() handles server validation)
   const validateSession = (session: Session | null): boolean => {
-    if (!session) return false
+    if (!session) {
+      return false
+    }
     
+    // Check if session is expired
     const now = Math.floor(Date.now() / 1000)
     const expiresAt = session.expires_at
     
     if (expiresAt && now >= expiresAt) {
-      setIsSessionExpired(true)
-      setSessionError('Your session has expired. Please sign in again.')
+      // Session expired
       return false
     }
     
-    setIsSessionExpired(false)
-    setSessionError(null)
+    // Session is valid
     return true
   }
 
@@ -122,7 +123,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Clean up any legacy session IDs
         localStorage.removeItem('vernaut-guest-session-id')
         // Emit event to notify dashboard that handoff completed
-        window.dispatchEvent(new CustomEvent('handoff-complete'))
+        window.dispatchEvent(new CustomEvent('handoff-complete', {
+          detail: {
+            ideas_transferred: result.ideas_transferred || 0,
+            limit_reached: result.limit_reached || false
+          }
+        }))
       } else {
         console.log('ℹ️ Handoff skipped:', result.message)
         // Still clear the session ID to avoid repeated attempts
@@ -130,7 +136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Clean up any legacy session IDs
         localStorage.removeItem('vernaut-guest-session-id')
         // Emit event even if no transfer (handoff process completed)
-        window.dispatchEvent(new CustomEvent('handoff-complete'))
+        window.dispatchEvent(new CustomEvent('handoff-complete', {
+          detail: {
+            ideas_transferred: 0,
+            limit_reached: false
+          }
+        }))
       }
     } catch (error) {
       console.error('❌ Error during guest idea handoff:', error)
@@ -141,57 +152,130 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let timeoutId: NodeJS.Timeout
 
-    // Get initial session
-    const getInitialSession = async () => {
+    // Get initial user (validates with server - Supabase recommended pattern)
+    const getInitialUser = async () => {
       try {
-        console.log('[AuthContext] Getting initial session...')
+        console.log('[AuthContext] Getting initial user (validating with server)...')
         
         // Set a timeout to prevent infinite loading
         timeoutId = setTimeout(() => {
-          console.warn('[AuthContext] Session loading timeout after 3s, assuming no session')
+          console.warn('[AuthContext] User loading timeout after 5s, assuming no session')
           setSession(null)
           setUser(null)
           setLoading(false)
-        }, 3000) // 3 second timeout
+        }, 5000) // 5 second timeout (getUser makes network request)
         
-        const { data: { session }, error } = await supabase.auth.getSession()
+        // First check if session exists (fast check from localStorage)
+        // This prevents calling getUser() when there's no session (which throws error)
+        const { data: { session: localSession } } = await supabase.auth.getSession()
+        
+        if (!localSession) {
+          // No session in localStorage - user is definitely not logged in
+          console.log('[AuthContext] No session found in localStorage')
+          clearTimeout(timeoutId)
+          setSession(null)
+          setUser(null)
+          setIsSessionExpired(false)
+          setSessionError(null)
+          setLoading(false)
+          return
+        }
+        
+        // Session exists - validate with server using getUser() (Supabase recommendation)
+        // This ensures the session is still valid on the server
+        const { data: { user: authUser }, error } = await supabase.auth.getUser()
         
         // Clear timeout if we get a response
         clearTimeout(timeoutId)
         
         if (error) {
-          console.error('[AuthContext] Error getting session:', error)
+          // Error from getUser() - session invalid/expired on server
+          console.error('[AuthContext] Error validating user with server:', error)
+          setSession(null)
+          setUser(null)
+          setIsSessionExpired(true)
+          setSessionError('Your session is invalid. Please sign in again.')
           setLoading(false)
           return
         }
         
-        console.log('[AuthContext] Session loaded:', session ? 'authenticated' : 'no session')
-        setSession(session)
-        setUser(session?.user ?? null)
-        validateSession(session)
+        if (authUser) {
+          // User is valid - use the session we already have
+          console.log('[AuthContext] User validated with server:', authUser.email)
+          setUser(authUser)
+          setSession(localSession) // Use the session we already fetched
+          setIsSessionExpired(false)
+          setSessionError(null)
+        } else {
+          // No user returned - clear state
+          console.log('[AuthContext] No authenticated user')
+          setSession(null)
+          setUser(null)
+          setIsSessionExpired(false)
+          setSessionError(null)
+        }
+        
         setLoading(false)
       } catch (error) {
-        console.error('[AuthContext] Exception getting session:', error)
+        // Handle any unexpected errors (like network failures)
+        console.error('[AuthContext] Exception getting user:', error)
         clearTimeout(timeoutId)
+        
+        // If it's an "Auth session missing" error, that's fine - just means no session
+        if (error instanceof Error && error.message.includes('Auth session missing')) {
+          console.log('[AuthContext] No session found (expected for logged out users)')
+          setSession(null)
+          setUser(null)
+          setIsSessionExpired(false)
+          setSessionError(null)
+        } else {
+          // Other errors - clear state to be safe
+          setSession(null)
+          setUser(null)
+        }
+        
         setLoading(false)
       }
     }
 
-    getInitialSession()
+    getInitialUser()
 
-    // Listen for auth changes
+    // Listen for auth changes (Supabase recommended pattern)
+    // onAuthStateChange provides validated sessions from Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AuthContext] Auth state changed:', event)
-        setSession(session)
-        setUser(session?.user ?? null)
-        validateSession(session)
-        setLoading(false)
         
-        // Handle automatic guest idea handoff on sign-in
-        if (event === 'SIGNED_IN' && session?.user) {
-          await handleGuestIdeaHandoff(session)
+        // onAuthStateChange provides validated sessions, but check expiry for safety
+        if (session) {
+          const isValid = validateSession(session)
+          
+          if (isValid) {
+            setSession(session)
+            setUser(session.user)
+            setIsSessionExpired(false)
+            setSessionError(null)
+            
+            // Handle automatic guest idea handoff on sign-in
+            if (event === 'SIGNED_IN') {
+              await handleGuestIdeaHandoff(session)
+            }
+          } else {
+            // Session expired - clear state
+            setSession(null)
+            setUser(null)
+            setIsSessionExpired(true)
+            setSessionError('Your session has expired. Please sign in again.')
+          }
+        } else {
+          // No session - clear state
+          setSession(null)
+          setUser(null)
+          setIsSessionExpired(false)
+          setSessionError(null)
         }
+        
+        setLoading(false)
       }
     )
 
@@ -262,3 +346,4 @@ export function useAuth() {
   }
   return context
 }
+

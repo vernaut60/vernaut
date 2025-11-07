@@ -1,11 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
 import { startQuestionGeneration } from '@/lib/questionGeneration'
 import { validateIdeaIsNotVague } from '@/lib/ideaValidation'
 
+// Background function: Generate title for an idea (fire-and-forget)
+async function generateTitleAsync(ideaId: string, ideaText: string): Promise<void> {
+  console.log(`[TITLE_GENERATION] Starting title generation for idea ${ideaId}`)
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey || !anthropicApiKey) {
+    console.error('[TITLE_GENERATION] Missing required environment variables')
+    return
+  }
+
+  // Use service role key for background operations (bypasses RLS)
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const anthropic = new Anthropic({ apiKey: anthropicApiKey })
+
+  try {
+    const titlePrompt = `Create a clean, professional title (2-6 words) for this business idea: "${ideaText}"
+
+Rules:
+- Keep it 2-6 words maximum
+- Use title case
+- Be specific and descriptive
+- Avoid generic words like "platform", "app", "tool" unless necessary
+- Focus on the core value proposition
+
+Return ONLY the title, no quotes, no explanations.`
+
+    const titleResponse = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 20,
+      temperature: 0.3,
+      messages: [{ role: 'user', content: titlePrompt }]
+    })
+
+    const generatedTitle = titleResponse.content[0]?.type === 'text' 
+      ? titleResponse.content[0].text.trim() 
+      : ''
+    const title = generatedTitle.replace(/^["']|["']$/g, '').trim() || ideaText.substring(0, 50)
+
+    // Update idea with generated title
+    const { error: updateError } = await supabase
+      .from('ideas')
+      .update({ title })
+      .eq('id', ideaId)
+
+    if (updateError) {
+      console.error('[TITLE_GENERATION] Failed to update idea with title:', updateError)
+      return
+    }
+
+    console.log(`[TITLE_GENERATION] Successfully generated and saved title for idea ${ideaId}: "${title}"`)
+
+  } catch (error) {
+    console.error(`[TITLE_GENERATION] Error generating title for idea ${ideaId}:`, error)
+    // Don't throw - this is a background job, failure is non-critical
+    // Fallback title (truncated idea_text) is already set
+  }
+}
+
+// Backend-enforced limit: Maximum number of ideas per user
+const MAX_IDEAS_PER_USER = 5
+
 // Input validation schema
 const requestSchema = z.object({
-  limit: z.number().min(1).max(50).default(10),
+  limit: z.number().min(1).max(MAX_IDEAS_PER_USER).default(MAX_IDEAS_PER_USER),
   offset: z.number().min(0).default(0)
 })
 
@@ -91,11 +157,15 @@ export async function GET(request: NextRequest) {
   try {
     // Step 1: Parse query parameters first (fast, no I/O)
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const userLimit = parseInt(searchParams.get('limit') || String(MAX_IDEAS_PER_USER))
     const offset = parseInt(searchParams.get('offset') || '0')
     
-    // Validate parameters
-    const validatedParams = requestSchema.parse({ limit, offset })
+    // Validate parameters and enforce backend limit (cap at MAX_IDEAS_PER_USER)
+    // This prevents users from bypassing the frontend limit by calling API directly
+    const validatedParams = requestSchema.parse({ 
+      limit: Math.min(userLimit, MAX_IDEAS_PER_USER), // Enforce backend cap
+      offset 
+    })
 
     // Step 2: Extract auth header and create single Supabase client (reused for both auth check and DB query)
     const authHeader = request.headers.get('Authorization')
@@ -291,13 +361,36 @@ export async function POST(request: NextRequest) {
 
     const userId = user.id
 
-    // Step 4.5: Rate limiting is handled in startQuestionGeneration
+    // Step 4.5: Check if user has reached the maximum number of ideas
+    const { count: existingIdeasCount, error: countError } = await supabase
+      .from('ideas')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
 
-    // Step 5: Create idea with status "generating_questions"
+    if (countError) {
+      logError('Failed to count existing ideas', {
+        userId,
+        error: countError.message
+      })
+      // Don't block creation if count fails - allow it to proceed
+    } else if (existingIdeasCount !== null && existingIdeasCount >= MAX_IDEAS_PER_USER) {
+      return NextResponse.json({
+        success: false,
+        message: `You've reached the maximum of ${MAX_IDEAS_PER_USER} ideas. Please delete an existing idea to create a new one.`
+      }, { status: 403 })
+    }
+
+    // Step 4.6: Rate limiting is handled in startQuestionGeneration
+
+    // Step 5: Create idea with status "generating_questions" (title will be generated in background)
+    // Use fallback title initially (truncated idea_text) - will be updated when AI title is ready
+    const fallbackTitle = ideaText.length > 50 ? ideaText.substring(0, 50) + '...' : ideaText
+    
     const { data: idea, error: insertError } = await supabase
       .from('ideas')
       .insert({
         idea_text: ideaText,
+        title: fallbackTitle, // Fallback title - will be updated by background job
         user_id: userId,
         status: 'generating_questions',
         wizard_answers: {},
@@ -348,7 +441,17 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Step 6: Start question generation using shared utility
+    // Step 6: Start title generation in background (fire-and-forget)
+    // This runs async so user gets immediate response
+    generateTitleAsync(idea.id, ideaText).catch((error) => {
+      // Error is already logged in generateTitleAsync
+      logError('Background title generation failed (non-blocking)', {
+        idea_id: idea.id,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    })
+
+    // Step 7: Start question generation using shared utility
     const generationResult = await startQuestionGeneration(
       idea.id,
       ideaText,
@@ -374,7 +477,7 @@ export async function POST(request: NextRequest) {
       idea_text_length: ideaText.length
     })
 
-    // Step 7: Return immediately with idea_id and status
+    // Step 8: Return immediately with idea_id and status
     const response = {
       success: true,
       id: idea.id,

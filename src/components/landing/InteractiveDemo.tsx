@@ -148,6 +148,7 @@ const PLACEHOLDER_EXAMPLES = [
   const [progress, setProgress] = useState(0)
   const [currentStage, setCurrentStage] = useState(0)
   const [currentTipIndex, setCurrentTipIndex] = useState(0)
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null)
   
   // All tips mixed and matched across phases - memoized to prevent recreation on every render
   const allTips = useMemo(() => [
@@ -194,26 +195,26 @@ const PLACEHOLDER_EXAMPLES = [
     "🚀 The best time to launch was yesterday. The second best is now."
   ], [])
 
-  // Progress stages (40 seconds total) - memoized to prevent recreation on every render
+  // Progress stages (90 seconds / 1.5 minutes total) - memoized to prevent recreation on every render
   const progressStages = useMemo(() => [
     { 
       label: "🔍 Analyzing your business model...", 
-      duration: 10000, 
+      duration: 22500, // 22.5 seconds per stage
       progress: 25
     },
     { 
       label: "⚔️ Scanning competitive landscape...", 
-      duration: 10000, 
+      duration: 22500, 
       progress: 50
     },
     { 
       label: "⚠️ Running risk analysis...", 
-      duration: 10000, 
+      duration: 22500, 
       progress: 75
     },
     { 
       label: "🎉 Almost ready...", 
-      duration: 10000, 
+      duration: 22500, 
       progress: 100
     }
   ], [])
@@ -225,39 +226,57 @@ const PLACEHOLDER_EXAMPLES = [
 
   // Progress bar logic
   const startProgressBar = useCallback(() => {
+    // Clear any existing interval first
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
+    
     setProgress(0)
     setCurrentStage(0)
     setCurrentTipIndex(0)
     
-    setInterval(() => {
-      setProgress(prev => {
-        const newProgress = prev + 0.5 // 0.5% every 200ms for smooth animation
-        const stageIndex = Math.floor(newProgress / 25)
-        
-        setCurrentStage(prevStage => {
-          if (stageIndex !== prevStage && stageIndex < progressStages.length) {
-            setCurrentTipIndex(0) // Reset tip index for new stage
-            return stageIndex
-          }
-          return prevStage
-        })
-        
-        if (newProgress >= 100) {
-          // Don't clear interval - keep it running for Phase 5
-          return 100
-        }
-        
-        return newProgress
-      })
-    }, 200)
+    const startTime = Date.now()
+    const totalDuration = 90000 // 90 seconds (1.5 minutes) in milliseconds
+    const intervalMs = 200 // Update every 200ms
     
-  }, [progressStages.length]) // Removed currentStage - using functional setState instead
+    // Start new interval and store the ID
+    progressIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      // Calculate progress based on actual elapsed time (more accurate)
+      const timeBasedProgress = Math.min((elapsed / totalDuration) * 100, 100)
+      
+      setProgress(timeBasedProgress)
+      
+      const stageIndex = Math.floor(timeBasedProgress / 25)
+      setCurrentStage(prevStage => {
+        if (stageIndex !== prevStage && stageIndex < progressStages.length) {
+          setCurrentTipIndex(0) // Reset tip index for new stage
+          return stageIndex
+        }
+        return prevStage
+      })
+      
+      // Stop interval when we reach 100%
+      if (timeBasedProgress >= 100) {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current)
+          progressIntervalRef.current = null
+        }
+      }
+    }, intervalMs)
+    
+  }, [progressStages.length])
   
   const stopProgressBar = useCallback(() => {
-    // Progress bar is now controlled by the interval variable directly
+    // Clear the interval properly
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
     setProgress(0)
     setCurrentStage(0)
-  }, []) // Empty deps - using functional setState
+  }, [])
 
   // Smooth scroll to competitor CTA
   const scrollToCompetitorCTA = () => {
@@ -493,10 +512,21 @@ const PLACEHOLDER_EXAMPLES = [
       stopProgressBar()
     }
     
+    // Cleanup on unmount or when breakdownLoading changes
     return () => {
       stopProgressBar()
     }
   }, [breakdownLoading, startProgressBar, stopProgressBar])
+  
+  // Additional cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+        progressIntervalRef.current = null
+      }
+    }
+  }, [])
 
   // Tip cycling effect - now uses mixed tips from all categories
   useEffect(() => {

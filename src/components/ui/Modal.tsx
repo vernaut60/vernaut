@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export interface ModalProps {
@@ -12,6 +13,13 @@ export interface ModalProps {
 
 export default function Modal({ isOpen, onClose, children, maxWidthClassName = 'max-w-lg' }: ModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = React.useState(false)
+
+  // Ensure we only render portal on client side
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -31,7 +39,7 @@ export default function Modal({ isOpen, onClose, children, maxWidthClassName = '
     if (e.target === backdropRef.current) onClose()
   }
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -39,16 +47,17 @@ export default function Modal({ isOpen, onClose, children, maxWidthClassName = '
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           ref={backdropRef}
           onClick={handleBackdrop}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            exit={{ opacity: 0, scale: 0.95, y: 12 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             className={`relative w-full ${maxWidthClassName}`}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-panel">
               {children}
@@ -58,6 +67,11 @@ export default function Modal({ isOpen, onClose, children, maxWidthClassName = '
       )}
     </AnimatePresence>
   )
+
+  // Render portal to document.body to avoid z-index/overflow issues
+  if (!mounted) return null
+  
+  return createPortal(modalContent, document.body)
 }
 
 

@@ -13,6 +13,7 @@ const responseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   ideas_transferred: z.number().optional(),
+  limit_reached: z.boolean().optional(),
   ideas: z.array(z.object({
     id: z.string(),
     user_id: z.string(),
@@ -148,7 +149,7 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
   }
 
   if (!guestIdeas || guestIdeas.length === 0) {
-    return { transferred: 0, ideas: [] }
+    return { transferred: 0, ideas: [], limit_reached: false }
   }
 
   // Check if user already has ideas with retry logic
@@ -176,11 +177,12 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
     throw new Error(`Failed to check existing ideas: ${errorMessage}`)
   }
 
-  if (existingIdeas && existingIdeas.length > 0) {
+  if (existingIdeas && existingIdeas.length >= 5) {
     return { 
       transferred: 0, 
       ideas: [],
-      message: 'User already has ideas, skipping transfer'
+      message: 'User already has 5 or more ideas, skipping transfer',
+      limit_reached: true
     }
   }
 
@@ -247,7 +249,8 @@ const transferGuestIdeas = async (guestSessionId: string, userId: string, authTo
 
   return { 
     transferred: 1, 
-    ideas: [transferredIdea]
+    ideas: [transferredIdea],
+    limit_reached: false
   }
 }
 
@@ -281,6 +284,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: result.message || `Successfully transferred ${result.transferred} guest idea`,
       ideas_transferred: result.transferred,
+      limit_reached: result.limit_reached || false,
       ideas: result.ideas
     }
 
