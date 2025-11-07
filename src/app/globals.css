@@ -140,7 +140,11 @@ body {
   transition: box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
 }
 .input-base::placeholder { color: var(--color-text-muted); }
-.input-base:focus { outline: none; box-shadow: 0 0 0 2px var(--color-ring), 0 0 0 4px rgba(67,97,238,0.35); border-color: rgba(67,97,238,0.5); }
+.input-base:focus { 
+  outline: none; 
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+}
 
 .modal-panel {
   background: linear-gradient(180deg, var(--color-bg), var(--color-surface));

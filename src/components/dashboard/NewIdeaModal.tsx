@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import RefinementPromptModal from './RefinementPromptModal'
+import { useRefineText } from '@/hooks/useRefineText'
 
 interface NewIdeaModalProps {
   isOpen: boolean
@@ -20,9 +21,6 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
   const { session } = useAuth()
   const { addToast } = useToast()
   const [idea, setIdea] = useState('')
-  const [refinedPreview, setRefinedPreview] = useState('')
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState<string | null>(null)
   const [hasAppliedRefined, setHasAppliedRefined] = useState(false)
   const [showRefinementPrompt, setShowRefinementPrompt] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
@@ -30,16 +28,82 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
   const [isCreatingIdea, setIsCreatingIdea] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-  const previewTimer = useRef<number | null>(null)
-  const lastRefinedIdea = useRef<string>('')
   const typingTimer = useRef<number | null>(null)
   const refinementWaitTimer = useRef<number | null>(null)
   const isWaitingRef = useRef(false) // Track waiting state in ref for closure access
+  const proceedWithAnalysisRef = useRef<(() => Promise<void>) | null>(null)
+  const checkAndShowPromptRef = useRef<(() => void) | null>(null)
 
-  const maxLength = 500
+  // Use shared refine-text hook
+  const {
+    refinedPreview,
+    previewLoading,
+    previewError,
+    setRefinedPreview,
+    setPreviewError
+  } = useRefineText({
+    idea,
+    hasAppliedRefined,
+    onEmptyIdea: useCallback(() => {
+      setHasAppliedRefined(false)
+    }, []),
+    onRefinementSkipped: useCallback(() => {
+      // If we were waiting for refinement and it was skipped, proceed with original
+      if (isWaitingRef.current && proceedWithAnalysisRef.current) {
+        setIsWaitingForRefinement(false)
+        isWaitingRef.current = false
+        // Clear wait timer
+        if (refinementWaitTimer.current) {
+          clearTimeout(refinementWaitTimer.current)
+          refinementWaitTimer.current = null
+        }
+        // Proceed with original text since refinement was skipped
+        setTimeout(() => {
+          console.log('Refinement skipped (idea too vague), proceeding with original text')
+          proceedWithAnalysisRef.current?.()
+        }, 50)
+      }
+    }, []),
+    onRefinementReady: useCallback(() => {
+      // If we were waiting for refinement, trigger check
+      if (isWaitingRef.current && checkAndShowPromptRef.current) {
+        setIsWaitingForRefinement(false)
+        isWaitingRef.current = false
+        // Clear wait timer
+        if (refinementWaitTimer.current) {
+          clearTimeout(refinementWaitTimer.current)
+          refinementWaitTimer.current = null
+        }
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          checkAndShowPromptRef.current?.()
+        }, 50)
+      }
+    }, []),
+    onRefinementFailed: useCallback(() => {
+      // If we were waiting for refinement and it failed, proceed with original
+      if (isWaitingRef.current && proceedWithAnalysisRef.current) {
+        setIsWaitingForRefinement(false)
+        isWaitingRef.current = false
+        // Clear wait timer
+        if (refinementWaitTimer.current) {
+          clearTimeout(refinementWaitTimer.current)
+          refinementWaitTimer.current = null
+        }
+        setTimeout(() => {
+          console.log('Refinement failed, proceeding with original text')
+          proceedWithAnalysisRef.current?.()
+        }, 50)
+      }
+    }, [])
+  })
+
+  const maxLength = 1000
   const characterCount = idea.length
   const isOverLimit = characterCount > maxLength
-  const canSubmit = idea.trim().length >= 10 && !isOverLimit
+  // Check if idea is too vague (showing guidance message instead of refined text)
+  const isIdeaTooVague = refinedPreview && refinedPreview.startsWith('💡')
+  const canSubmit = idea.trim().length >= 10 && !isOverLimit && !isIdeaTooVague
 
   // Auto-focus textarea when modal opens
   useEffect(() => {
@@ -223,7 +287,12 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
       
       addToast(userMessage, 'error')
     }
-  }, [idea, session?.access_token, router, onClose, addToast])
+  }, [idea, refinedPreview, session?.access_token, router, onClose, addToast])
+
+  // Store refs for use in hook callbacks
+  useEffect(() => {
+    proceedWithAnalysisRef.current = proceedWithAnalysis
+  }, [proceedWithAnalysis])
 
   const checkAndShowPrompt = useCallback(() => {
     // Check if we should show refinement prompt
@@ -231,6 +300,7 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
       return (
         !hasAppliedRefined &&
         refinedPreview &&
+        !refinedPreview.startsWith('💡') && // Don't show prompt for guidance messages
         idea.trim() !== refinedPreview.trim() &&
         idea.trim().length > 0 &&
         !previewError // Don't show prompt if refinement failed
@@ -250,6 +320,11 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
     }
   }, [hasAppliedRefined, refinedPreview, idea, previewError, proceedWithAnalysis])
 
+  // Store ref for use in hook callbacks
+  useEffect(() => {
+    checkAndShowPromptRef.current = checkAndShowPrompt
+  }, [checkAndShowPrompt])
+
   const handleReset = () => {
     setIdea('')
     setRefinedPreview('')
@@ -261,15 +336,18 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
   // Handle refinement prompt responses
   const handleAcceptRefinement = async () => {
     try {
-      setIdea(refinedPreview)
-      setRefinedPreview('')
-      setHasAppliedRefined(true)
-      setShowRefinementPrompt(false)
-      
-      // Proceed with analysis after applying refinement
-      setTimeout(() => {
-        proceedWithAnalysis()
-      }, 100)
+      // Don't allow using guidance messages as refined text
+      if (refinedPreview && !refinedPreview.startsWith('💡')) {
+        setIdea(refinedPreview)
+        setRefinedPreview('')
+        setHasAppliedRefined(true)
+        setShowRefinementPrompt(false)
+        
+        // Proceed with analysis after applying refinement
+        setTimeout(() => {
+          proceedWithAnalysis()
+        }, 100)
+      }
     } catch (error) {
       console.error('Error accepting refinement:', error)
     }
@@ -278,10 +356,11 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
   const handleRejectRefinement = async () => {
     try {
       setShowRefinementPrompt(false)
-      // Keep prompt logic stateless with respect to preferences
-      
-      // Just close the refinement prompt, don't proceed with analysis yet
-      // User can click "Break It Down" again to proceed
+      // Mark that we've handled this refinement offer (user rejected it)
+      // This prevents showing the prompt again when user clicks "Break It Down"
+      setHasAppliedRefined(true)
+      // Clear the refined preview so it doesn't trigger the prompt again
+      setRefinedPreview('')
     } catch (error) {
       console.error('Error rejecting refinement:', error)
     }
@@ -289,129 +368,9 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
 
   // Removed "Don't ask again" handler
 
-  // Debounce refine-preview calls to /api/refine-text
-  useEffect(() => {
-    if (previewTimer.current) {
-      window.clearTimeout(previewTimer.current)
-      previewTimer.current = null
-    }
-
-    if (!idea.trim()) {
-      setRefinedPreview('')
-      setPreviewError(null)
-      setPreviewLoading(false)
-      setHasAppliedRefined(false)
-      lastRefinedIdea.current = ''
-      return
-    }
-
-    // Count words in the input
-    const wordCount = idea.trim().split(/\s+/).filter(word => word.length > 0).length
-
-    // Require at least 3 words before refining to avoid generic suggestions for short inputs
-    if (wordCount < 3) {
-      setPreviewError(null)
-      setPreviewLoading(false)
-      setRefinedPreview('') // Clear any previous refinement for short inputs
-      return
-    }
-
-    // Skip refinement if the idea is the same as what we last refined
-    // Also skip if user has already applied the refined text
-    if (idea.trim() === lastRefinedIdea.current || idea.trim() === refinedPreview || hasAppliedRefined) {
-      return
-    }
-
-    setPreviewError(null)
-    
-    // Adaptive debounce: longer inputs get slightly more time (user might still be composing)
-    // Short inputs (3-10 words): 600ms (quick feedback)
-    // Medium inputs (11-20 words): 800ms (let them finish the sentence)
-    // Long inputs (21+ words): 1000ms (give them time to complete their thought)
-    let debounceDelay = 600 // default
-    if (wordCount > 20) {
-      debounceDelay = 1000
-    } else if (wordCount > 10) {
-      debounceDelay = 800
-    }
-    
-    previewTimer.current = window.setTimeout(async () => {
-      setPreviewLoading(true)
-      
-      // Set up timeout for fetch (15 seconds max)
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000)
-      
-      try {
-        const res = await fetch('/api/refine-text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idea }),
-          signal: controller.signal,
-        })
-        
-        clearTimeout(timeoutId)
-        
-        const data = await res.json()
-        if (!res.ok || !data?.success) {
-          throw new Error(data?.error || 'Failed to refine')
-        }
-        setRefinedPreview(data.refinedIdea || '')
-        lastRefinedIdea.current = idea.trim()
-        
-        // If we were waiting for refinement, trigger check
-        if (isWaitingRef.current) {
-          setIsWaitingForRefinement(false)
-          isWaitingRef.current = false
-          // Clear wait timer
-          if (refinementWaitTimer.current) {
-            clearTimeout(refinementWaitTimer.current)
-            refinementWaitTimer.current = null
-          }
-          // Small delay to ensure state is updated
-          setTimeout(() => {
-            checkAndShowPrompt()
-          }, 50)
-        }
-      } catch (e: unknown) {
-        clearTimeout(timeoutId)
-        // Don't show error if user aborted or if component unmounted
-        if (e instanceof Error && e.name === 'AbortError') {
-          setPreviewError('Refinement took too long')
-        } else {
-          setPreviewError(e instanceof Error ? e.message : 'Unable to refine right now')
-        }
-        setRefinedPreview('')
-        
-        // If we were waiting for refinement and it failed, proceed with original
-        if (isWaitingRef.current) {
-          setIsWaitingForRefinement(false)
-          isWaitingRef.current = false
-          // Clear wait timer
-          if (refinementWaitTimer.current) {
-            clearTimeout(refinementWaitTimer.current)
-            refinementWaitTimer.current = null
-          }
-          setTimeout(() => {
-            console.log('Refinement failed, proceeding with original text')
-            proceedWithAnalysis()
-          }, 50)
-        }
-      } finally {
-        setPreviewLoading(false)
-      }
-    }, debounceDelay)
-
-    return () => {
-      if (previewTimer.current) {
-        window.clearTimeout(previewTimer.current)
-        previewTimer.current = null
-      }
-    }
-  }, [idea, refinedPreview, checkAndShowPrompt, hasAppliedRefined, proceedWithAnalysis])
-
   const handleUseRefined = () => {
-    if (refinedPreview) {
+    // Don't allow using guidance messages as refined text
+    if (refinedPreview && !refinedPreview.startsWith('💡')) {
       setIdea(refinedPreview)
       setRefinedPreview('')
       setHasAppliedRefined(true)
@@ -560,7 +519,8 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
                 {/* Static tip when no input */}
                 {!idea.trim() && (
                   <p className="text-xs text-neutral-400 italic leading-relaxed">
-                    ✨ Tip: Be specific. Mention your target audience and goal — AI tailors insights to your idea.
+                    💡 Include: Who it&apos;s for, what problem it solves, and your solution.<br />
+                    Example: &quot;Time tracking tool for remote teams losing billable hours&quot;
                   </p>
                 )}
 
@@ -591,16 +551,33 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.3 }}
-                          className="bg-neutral-800/30 border border-neutral-600/30 rounded-lg p-3 space-y-2 cursor-pointer hover:bg-neutral-700/30 transition-all duration-200"
-                          onClick={handleUseRefined}
+                          className={`bg-neutral-800/30 border rounded-lg p-3 space-y-2 transition-all duration-200 ${
+                            refinedPreview.startsWith('💡')
+                              ? 'border-amber-500/30 bg-amber-500/5'
+                              : 'border-neutral-600/30 cursor-pointer hover:bg-neutral-700/30'
+                          }`}
+                          onClick={!refinedPreview.startsWith('💡') ? handleUseRefined : undefined}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-neutral-400">✨ AI Refined:</span>
-                            <span className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                              Click to use this
-                            </span>
-                          </div>
-                          <p className="text-sm text-neutral-200 leading-relaxed italic">&ldquo;{refinedPreview}&rdquo;</p>
+                          {refinedPreview.startsWith('💡') ? (
+                            // Guidance message (not clickable)
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-amber-400">💡 Suggestion:</span>
+                              </div>
+                              <p className="text-sm text-neutral-300 leading-relaxed">{refinedPreview.replace('💡 ', '')}</p>
+                            </div>
+                          ) : (
+                            // Refined text (clickable)
+                            <>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-neutral-400">✨ AI Refined:</span>
+                                <span className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                                  Click to use this
+                                </span>
+                              </div>
+                              <p className="text-sm text-neutral-200 leading-relaxed italic">&ldquo;{refinedPreview}&rdquo;</p>
+                            </>
+                          )}
                         </motion.div>
                       ) : null}
                     </div>
@@ -654,6 +631,7 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
                     whileHover={canSubmit && !isWaitingForRefinement && !isCreatingIdea ? { scale: 1.02 } : {}}
                     whileTap={canSubmit && !isWaitingForRefinement && !isCreatingIdea ? { scale: 0.98 } : {}}
                     className={`order-1 sm:order-2 ${canSubmit ? 'btn-primary' : 'btn-primary'} ${!canSubmit || isWaitingForRefinement || isCreatingIdea ? 'disabled:opacity-60 cursor-not-allowed' : ''}`}
+                    title={isIdeaTooVague ? 'Please improve your idea based on the suggestion above' : undefined}
                   >
                     {isCreatingIdea ? (
                       <>
@@ -687,6 +665,12 @@ export default function NewIdeaModal({ isOpen, onClose }: NewIdeaModalProps) {
         isOpen={showRefinementPrompt}
         onAccept={handleAcceptRefinement}
         onReject={handleRejectRefinement}
+        onClose={() => {
+          setShowRefinementPrompt(false)
+          // Mark as handled so we don't show prompt again for this refinement
+          setHasAppliedRefined(true)
+          setRefinedPreview('')
+        }}
         refinedText={refinedPreview}
         originalText={idea.trim()}
       />

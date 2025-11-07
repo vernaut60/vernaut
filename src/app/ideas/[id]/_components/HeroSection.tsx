@@ -245,19 +245,68 @@ export default function HeroSection({
               <p className="text-sm text-neutral-300 mb-3">
                 Your personalized analysis considers your specific background and approach.
               </p>
-              <div className="space-y-2">
-                {scoreFactors.map((factor, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: 0.7 + index * 0.1 }}
-                    className="flex items-start gap-2"
-                  >
-                    <span className="text-blue-400 text-sm mt-0.5">✓</span>
-                    <span className="text-sm text-neutral-300">{factor.factor} - {factor.impact}</span>
-                  </motion.div>
-                ))}
+              <div className="space-y-3">
+                {scoreFactors.map((factor, index) => {
+                  const isPositive = factor.impact?.toLowerCase() === 'positive'
+                  const isNegative = factor.impact?.toLowerCase() === 'negative'
+                  
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: 0.7 + index * 0.1 }}
+                      className={`flex items-start gap-3 p-3 rounded-lg border ${
+                        isPositive 
+                          ? 'bg-green-500/10 border-green-500/30' 
+                          : isNegative
+                          ? 'bg-red-500/10 border-red-500/30'
+                          : 'bg-neutral-500/10 border-neutral-500/30'
+                      }`}
+                    >
+                      {/* Icon based on impact */}
+                      <span className={`text-lg mt-0.5 flex-shrink-0 ${
+                        isPositive 
+                          ? 'text-green-400' 
+                          : isNegative
+                          ? 'text-red-400'
+                          : 'text-neutral-400'
+                      }`}>
+                        {isPositive ? '✓' : isNegative ? '✗' : '•'}
+                      </span>
+                      
+                      {/* Factor text */}
+                      <div className="flex-1">
+                        <p className="text-sm text-neutral-200 leading-relaxed">
+                          {factor.factor}
+                        </p>
+                        
+                        {/* Impact badge */}
+                        {factor.impact && (
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                              isPositive
+                                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                : isNegative
+                                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                : 'bg-neutral-500/20 text-neutral-400 border border-neutral-500/30'
+                            }`}>
+                              <span className="font-bold">{isPositive ? '+' : isNegative ? '-' : '•'}</span>
+                              <span className="capitalize">{factor.impact}</span>
+                            </span>
+                            
+                            {/* Category badge (optional, subtle) */}
+                            {factor.category && (
+                              <span className="text-xs text-neutral-500">
+                                {factor.category}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )
+                })}
               </div>
             </motion.div>
           )}

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import crypto from "crypto";
+import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
+import { validateIdeaIsNotVague } from "@/lib/ideaValidation";
 
-// Rate limiting configuration
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX = 10; // 10 requests per minute
-const rateBuckets: Map<string, { windowStart: number; count: number }> = new Map();
+// Rate limiting configuration (server + DB-backed)
+const RATE_LIMIT_WINDOW_SECONDS = 60; // 60s window
+const RATE_LIMIT_MAX = 15; // default production limit per user per minute
 
 // Input validation schema
 const requestSchema = z.object({
@@ -25,7 +27,9 @@ const requestSchema = z.object({
 const responseSchema = z.object({
   success: z.boolean(),
   rawIdea: z.string(),
-  refinedIdea: z.string(),
+  refinedIdea: z.string().nullable().optional(), // Can be null if skipRefinement is true
+  skipRefinement: z.boolean().optional(), // Flag to indicate refinement was skipped
+  reason: z.string().optional(), // Reason for skipping (e.g., "too vague")
   error: z.string().optional()
 });
 
@@ -90,25 +94,13 @@ export async function POST(request: NextRequest) {
   const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   
   try {
-    // Step 1: Rate limiting
-    const now = Date.now();
-    const bucket = rateBuckets.get(clientIp);
-    if (!bucket || now - bucket.windowStart > RATE_LIMIT_WINDOW_MS) {
-      rateBuckets.set(clientIp, { windowStart: now, count: 1 });
-    } else {
-      bucket.count += 1;
-      if (bucket.count > RATE_LIMIT_MAX) {
-        logError('warn', 'Rate limit exceeded', { 
-          clientIp, 
-          count: bucket.count, 
-          windowStart: bucket.windowStart 
-        });
-        return NextResponse.json(
-          { success: false, error: 'Rate limit exceeded. Please try again shortly.' },
-          { status: 429 }
-        );
-      }
-    }
+    // Step 1: Authenticate user (optional for demo/guest users)
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Allow unauthenticated users (guests) for demo purposes
+    // Rate limiting will use IP address for guests, user_id for authenticated users
+    const userId = user?.id || null;
 
     // Step 2: Content type validation
     const contentType = request.headers.get("content-type") || "";
@@ -120,7 +112,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 3: Parse and validate request body
+    // Step 2: Parse and validate request body
     let body: unknown;
     try {
       body = await request.json();
@@ -132,7 +124,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 4: Input validation with Zod
+    // Step 3: Input validation with Zod
     let validatedInput: { idea: string };
     try {
       validatedInput = requestSchema.parse(body);
@@ -160,7 +152,108 @@ export async function POST(request: NextRequest) {
     const rawIdea = validatedInput.idea.trim();
     const inputWordCount = rawIdea.split(/\s+/).filter(w => w.length > 0).length;
 
-    // Step 5: Environment validation
+    // Step 3.5: Validate idea is not too vague (skip refinement for vague ideas)
+    // This prevents showing refined text for ideas that are too short/unclear
+    const validationResult = await validateIdeaIsNotVague(rawIdea);
+    if (!validationResult.valid) {
+      // Return helpful guidance message instead of refined text
+      // This gives users actionable feedback on how to improve their idea
+      let guidanceMessage = '';
+      
+      if (validationResult.error?.includes('more detail')) {
+        guidanceMessage = '💡 Add more details: Describe who it\'s for, what problem it solves, and your solution approach.';
+      } else if (validationResult.error?.includes('too vague')) {
+        guidanceMessage = '💡 Be more specific: Try describing what your product does or who it helps. Example: "Time tracking tool for remote teams losing billable hours"';
+      } else if (validationResult.error?.includes('business idea')) {
+        guidanceMessage = '💡 Focus on a business concept: Describe a product, service, or startup idea that solves a problem for customers.';
+      } else {
+        guidanceMessage = '💡 Add more context: Include details about your target audience, the problem you\'re solving, and your proposed solution.';
+      }
+      
+      return NextResponse.json(
+        { 
+          success: true, 
+          rawIdea, 
+          refinedIdea: guidanceMessage,
+          skipRefinement: true,
+          reason: validationResult.error 
+        },
+        { status: 200 }
+      );
+    }
+
+    // Step 4: Normalize text & compute hash (for de-dup)
+    // For guests, use IP address; for authenticated users, use user_id
+    const normalizedText = rawIdea.replace(/\s+/g, ' ').trim();
+    const identifier = userId || `ip:${clientIp}`;
+    const inputHash = crypto.createHash('sha256').update(`${identifier}::${normalizedText}`).digest('hex');
+
+    // Step 5: De-dup cache (60s TTL)
+    // For guests, cache by IP; for authenticated users, cache by user_id
+    const ttlIso = new Date(Date.now() - 60_000).toISOString();
+    const cacheQuery = supabase
+      .from('refine_cache')
+      .select('result, created_at')
+      .eq('input_hash', inputHash)
+      .gt('created_at', ttlIso);
+    
+    if (userId) {
+      cacheQuery.eq('user_id', userId);
+    } else {
+      // For guests, use a special guest user_id or IP-based identifier
+      // Since refine_cache requires user_id, we'll use a guest identifier
+      cacheQuery.eq('user_id', `guest:${clientIp}`);
+    }
+    
+    const { data: cached } = await cacheQuery.maybeSingle();
+
+    interface CachedResult {
+      result?: {
+        refinedIdea: string
+      }
+    }
+
+    if (cached && (cached as CachedResult).result) {
+      const response = NextResponse.json({ success: true, rawIdea, refinedIdea: (cached as CachedResult).result?.refinedIdea }, { status: 200 });
+      response.headers.set('X-Refine-Cache', 'hit');
+      response.headers.set('X-RateLimit-Limit', String(RATE_LIMIT_MAX));
+      // Remaining is unknown from cache path; set to '-'
+      response.headers.set('X-RateLimit-Remaining', '-');
+      response.headers.set('X-RateLimit-Reset', String(Math.floor((Date.now() + RATE_LIMIT_WINDOW_SECONDS * 1000) / 1000)));
+      return response;
+    }
+
+    // Step 6: DB-backed rate limit (per user or per IP for guests)
+    // For guests, use IP-based identifier; for authenticated users, use user_id
+    const rateLimitUserId = userId || `guest:${clientIp}`;
+    const { data: rlData, error: rlError } = await supabase.rpc('check_rate_limit', {
+      p_user_id: rateLimitUserId,
+      p_endpoint: 'refine-text',
+      p_limit: RATE_LIMIT_MAX,
+      p_window_seconds: RATE_LIMIT_WINDOW_SECONDS
+    });
+
+    if (rlError) {
+      logError('error', 'Rate limit RPC failed', { clientIp, userId: rateLimitUserId, error: rlError.message });
+      // Fail open to avoid blocking users if RPC misconfigured
+    } else if (Array.isArray(rlData) && rlData[0] && rlData[0].allowed === false) {
+      const resetAt = rlData[0].reset_at as string;
+      const remaining = rlData[0].remaining as number;
+      const limit = rlData[0].limit_val as number;
+      const resetUnix = Math.floor(new Date(resetAt).getTime() / 1000);
+      const nowUnix = Math.floor(Date.now() / 1000);
+      const retryAfter = Math.max(resetUnix - nowUnix, 1);
+      const resp = NextResponse.json(
+        { success: false, error: 'Rate limit exceeded. Please try again shortly.', retry_after: retryAfter },
+        { status: 429 }
+      );
+      resp.headers.set('X-RateLimit-Limit', String(limit));
+      resp.headers.set('X-RateLimit-Remaining', String(remaining));
+      resp.headers.set('X-RateLimit-Reset', String(resetUnix));
+      return resp;
+    }
+
+    // Step 7: Environment validation
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       logError('error', 'Missing Anthropic API key', { clientIp });
@@ -170,7 +263,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 6: Determine adaptive limits based on input length
+    // Step 8: Determine adaptive limits based on input length
     let targetWordMin: number;
     let targetWordMax: number;
     let maxTokens: number;
@@ -196,7 +289,7 @@ export async function POST(request: NextRequest) {
       maxTokens = 250; // ~187 words max
     }
 
-    // Step 7: Anthropic API call with retry logic
+    // Step 9: Anthropic API call with retry logic
     const client = new Anthropic({ apiKey });
     let refinedIdea: string;
 
@@ -277,12 +370,12 @@ Idea to refine: ${rawIdea}`
       }
 
       return NextResponse.json(
-        { success: false, error: "AI service error. Please try again later." },
-        { status: 502 }
-      );
+      { success: false, error: "AI service error. Please try again later." },
+      { status: 502 }
+    );
     }
 
-    // Step 7: Validate response structure
+    // Step 10: Validate response structure
     const response = { success: true, rawIdea, refinedIdea };
     try {
       responseSchema.parse(response);
@@ -298,7 +391,15 @@ Idea to refine: ${rawIdea}`
       );
     }
 
-    // Step 8: Success logging
+    // Step 11: Store in cache (upsert) & Success logging
+    try {
+      await supabase
+        .from('refine_cache')
+        .upsert({ user_id: rateLimitUserId, input_hash: inputHash, result: { refinedIdea }, created_at: new Date().toISOString() }, { onConflict: 'user_id,input_hash' });
+    } catch (err) {
+      logError('warn', 'Refine cache upsert failed', { userId: rateLimitUserId, error: err instanceof Error ? err.message : String(err) });
+    }
+
     logError('info', 'Text refinement successful', { 
       clientIp, 
       inputLength: rawIdea.length,
@@ -306,7 +407,15 @@ Idea to refine: ${rawIdea}`
       wordCount: refinedIdea.split(/\s+/).length
     });
 
-    return NextResponse.json(response, { status: 200 });
+    const httpResponse = NextResponse.json(response, { status: 200 });
+    httpResponse.headers.set('X-Refine-Cache', 'miss');
+    if (Array.isArray(rlData) && rlData[0]) {
+      const resetUnix = Math.floor(new Date(rlData[0].reset_at as string).getTime() / 1000);
+      httpResponse.headers.set('X-RateLimit-Limit', String(rlData[0].limit_val));
+      httpResponse.headers.set('X-RateLimit-Remaining', String(rlData[0].remaining));
+      httpResponse.headers.set('X-RateLimit-Reset', String(resetUnix));
+    }
+    return httpResponse;
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

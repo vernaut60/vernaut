@@ -33,7 +33,7 @@ export default function Header() {
   }
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-800">
+    <header className="fixed top-0 left-0 right-0 z-[60] bg-black/90 backdrop-blur-sm border-b border-neutral-800">
       <div className="mx-auto max-w-6xl px-4">
         <div className="flex items-center justify-between h-16">
           {/* Brand Name - Left */}

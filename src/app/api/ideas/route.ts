@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { generateQuestionsAsync } from '@/lib/questionGeneration'
+import { startQuestionGeneration } from '@/lib/questionGeneration'
+import { validateIdeaIsNotVague } from '@/lib/ideaValidation'
 
 // Input validation schema
 const requestSchema = z.object({
@@ -264,11 +265,20 @@ export async function POST(request: NextRequest) {
     const validatedInput = createIdeaSchema.parse(body)
     const ideaText = validatedInput.idea_text.trim()
 
-    // Step 2: Extract auth header and create Supabase client
+    // Step 2: Validate idea is not too vague (same as demo validation)
+    const validationResult = await validateIdeaIsNotVague(ideaText)
+    if (!validationResult.valid) {
+      return NextResponse.json({
+        success: false,
+        message: validationResult.error || 'Idea validation failed'
+      }, { status: 400 })
+    }
+
+    // Step 3: Extract auth header and create Supabase client
     const authHeader = request.headers.get('Authorization')
     const supabase = await createAuthenticatedClient(authHeader)
 
-    // Step 3: Authenticate and get user ID
+    // Step 4: Authenticate and get user ID
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -281,40 +291,9 @@ export async function POST(request: NextRequest) {
 
     const userId = user.id
 
-    // Step 3.5: Check if user has too many pending generations
-    // Only count recent generations (last 5 minutes) to exclude stuck/failed generations
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-    
-    const { count, error: countError } = await supabase
-      .from('ideas')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .in('status', ['generating_questions', 'generating_stage1'])
-      .gte('created_at', fiveMinutesAgo) // Only count recent generations (exclude stuck ones)
+    // Step 4.5: Rate limiting is handled in startQuestionGeneration
 
-    if (countError) {
-      logError('Failed to check pending generations', {
-        userId,
-        error: countError.message
-      })
-      // Don't block - continue anyway (graceful degradation)
-    }
-
-    if (count && count >= 3) {
-      // Log for analytics/monitoring
-      logInfo('Rate limit hit', {
-        user_id: userId,
-        pending_count: count,
-        idea_text_length: ideaText.length
-      })
-      
-      return NextResponse.json({
-        success: false,
-        message: 'You have too many ideas generating. Please wait for them to complete before creating a new one.'
-      }, { status: 429 })
-    }
-
-    // Step 4: Create idea with status "generating_questions"
+    // Step 5: Create idea with status "generating_questions"
     const { data: idea, error: insertError } = await supabase
       .from('ideas')
       .insert({
@@ -369,78 +348,33 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Step 5: Start question generation in background (don't await)
-    // Fire and forget - runs async, doesn't block response
-    // Get auth token - prefer header, fallback to session
-    let authToken: string | null = null
+    // Step 6: Start question generation using shared utility
+    const generationResult = await startQuestionGeneration(
+      idea.id,
+      ideaText,
+      userId,
+      supabase,
+      authHeader
+    )
 
-    if (authHeader?.startsWith('Bearer ')) {
-      authToken = authHeader.replace('Bearer ', '')
-    }
-
-    if (!authToken) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (session?.access_token) {
-          authToken = session.access_token
-          logInfo('Using session token for question generation', {
-            idea_id: idea.id,
-            user_id: userId
-          })
-        }
-      } catch (sessionError) {
-        // Session lookup failed
-        logError('Failed to get session for token fallback', {
-          idea_id: idea.id,
-          user_id: userId,
-          error: sessionError instanceof Error ? sessionError.message : 'Unknown'
-        })
-      }
-    }
-
-    // Now check if we have a token
-    if (!authToken) {
-      logError('Cannot start question generation - no auth token available', {
-        idea_id: idea.id,
-        user_id: userId,
-        has_auth_header: !!authHeader
-      })
-      
-      await supabase
-        .from('ideas')
-        .update({
-          status: 'generation_failed',
-          error_message: 'Missing authentication token for question generation',
-          error_occurred_at: new Date().toISOString()
-        })
-        .eq('id', idea.id)
-      
+    if (!generationResult.success) {
+      // If rate limited or other error, return appropriate response
+      const statusCode = generationResult.error?.includes('too many') ? 429 : 500
       return NextResponse.json({
-        success: true,
+        success: false,
         id: idea.id,
-        status: 'generation_failed'
-      }, { status: 201 })
+        status: 'generation_failed',
+        message: generationResult.error || 'Failed to start question generation'
+      }, { status: statusCode })
     }
     
-    // Log background job start
-    logInfo('Starting background question generation', {
+    logInfo('Question generation started', {
       idea_id: idea.id,
       user_id: userId,
       idea_text_length: ideaText.length
     })
-    
-    generateQuestionsAsync(idea.id, ideaText)
-      .catch((error) => {
-        // Error is already logged and status updated in generateQuestionsAsync
-        logError('Background generation failed', {
-          idea_id: idea.id,
-          user_id: userId,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-      })
 
-    // Step 6: Return immediately with idea_id and status
+    // Step 7: Return immediately with idea_id and status
     const response = {
       success: true,
       id: idea.id,

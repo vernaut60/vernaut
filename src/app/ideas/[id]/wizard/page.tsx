@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Button } from '@/components/ui/Button'
@@ -42,6 +42,7 @@ interface IdeaData {
 
 export default function WizardPage() {
   const params = useParams()
+  const router = useRouter()
   const { session } = useAuth()
   const { addToast } = useToast()
   const ideaId = params.id as string
@@ -134,6 +135,15 @@ export default function WizardPage() {
         ? String(data.idea.status)
         : 'error'
       
+      // If wizard is complete, redirect to results page
+      if (ideaStatus === 'complete' || 
+          ideaStatus === 'generating_stage1' || 
+          ideaStatus === 'stage1_failed') {
+        // Wizard is done - redirect to results page
+        router.push(`/ideas/${ideaId}`)
+        return // Don't render wizard UI
+      }
+      
       if (ideaStatus === 'generating_questions') {
         setStatus('generating_questions')
       } else if (ideaStatus === 'questions_ready') {
@@ -147,7 +157,7 @@ export default function WizardPage() {
       setError(err instanceof Error ? err.message : 'Failed to load wizard')
       setStatus('error')
     }
-  }, [ideaId, session?.access_token])
+  }, [ideaId, session?.access_token, router])
 
   // Initial load
   useEffect(() => {
@@ -458,19 +468,37 @@ export default function WizardPage() {
     await new Promise(resolve => setTimeout(resolve, 300))
     
     try {
-      // TODO: Call complete-wizard endpoint when it's ready
-      // For now, just show a message
-      addToast('Wizard completion endpoint coming soon', 'info')
-      
-      // Placeholder: redirect to generating page
-      // router.push(`/ideas/${ideaId}/generating`)
+      // Ensure final answer is saved before completing
+      if (currentQuestion && answers[currentQuestion.id] !== undefined) {
+        await silentSave(answers, currentStep)
+      }
+
+      // Call complete-wizard endpoint
+      const response = await fetch(`/api/ideas/${ideaId}/complete-wizard`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to complete wizard')
+      }
+
+      // Success - redirect to generating page
+      addToast('Starting analysis...', 'success')
+      window.location.href = `/ideas/${ideaId}?status=generating_stage1`
     } catch (err) {
       console.error('Error completing wizard:', err)
-      addToast('Failed to submit answers. Please try again.', 'error')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit answers. Please try again.'
+      addToast(errorMessage, 'error')
     } finally {
       setIsSubmitting(false)
     }
-  }, [idea?.questions, currentStep, answers, session?.access_token, addToast])
+  }, [idea?.questions, currentStep, answers, session?.access_token, addToast, ideaId, silentSave])
 
   // Cleanup timers
   useEffect(() => {
@@ -517,12 +545,20 @@ export default function WizardPage() {
           </div>
           <h2 className="text-xl font-semibold text-[var(--color-text)] mb-2">Something went wrong</h2>
           <p className="text-[var(--color-text-muted)] mb-6">{error || 'An unexpected error occurred'}</p>
-          <Button
-            onClick={() => window.location.reload()}
-            variant="primary"
-          >
-            Refresh Page
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+            <Button
+              onClick={() => window.location.reload()}
+              variant="primary"
+            >
+              Refresh Page
+            </Button>
+            <Button
+              onClick={() => router.push('/dashboard')}
+              variant="ghost"
+            >
+              Go to Dashboard
+            </Button>
+          </div>
         </div>
       </WizardContainer>
     )

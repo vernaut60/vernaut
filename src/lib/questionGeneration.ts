@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -346,6 +346,109 @@ Return ONLY the JSON array.`
     console.error('[QUESTION_GENERATION] AI generation failed:', error)
     throw error
   }
+}
+
+/**
+ * Shared utility: Start question generation for an idea
+ * Handles rate limiting, status update, and background job triggering
+ * 
+ * @param ideaId - The idea ID to generate questions for
+ * @param ideaText - The idea text to generate questions from
+ * @param userId - The user ID (for rate limiting)
+ * @param supabase - Authenticated Supabase client
+ * @param authHeader - Optional auth header for token fallback
+ * @returns Object with success status and any error message
+ */
+export async function startQuestionGeneration(
+  ideaId: string,
+  ideaText: string,
+  userId: string,
+  supabase: SupabaseClient,
+  authHeader: string | null = null
+): Promise<{ success: boolean; error?: string }> {
+  // Step 1: Check rate limit (max 3 concurrent generations per user)
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+  
+  const { count, error: countError } = await supabase
+    .from('ideas')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .in('status', ['generating_questions', 'generating_stage1'])
+    .gte('created_at', fiveMinutesAgo)
+
+  if (countError) {
+    console.error('[QUESTION_GENERATION] Failed to check pending generations:', countError)
+    // Don't block - continue anyway (graceful degradation)
+  }
+
+  if (count && count >= 3) {
+    return {
+      success: false,
+      error: 'You have too many ideas generating. Please wait for them to complete before starting another one.'
+    }
+  }
+
+  // Step 2: Update status to 'generating_questions'
+  const { error: updateError } = await supabase
+    .from('ideas')
+    .update({
+      status: 'generating_questions'
+    })
+    .eq('id', ideaId)
+
+  if (updateError) {
+    console.error('[QUESTION_GENERATION] Failed to update idea status:', updateError)
+    return {
+      success: false,
+      error: 'Failed to start question generation. Please try again.'
+    }
+  }
+
+  // Step 3: Get auth token for background job (prefer header, fallback to session)
+  let authToken: string | null = null
+
+  if (authHeader?.startsWith('Bearer ')) {
+    authToken = authHeader.replace('Bearer ', '')
+  }
+
+  if (!authToken) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        authToken = session.access_token
+      }
+    } catch (sessionError) {
+      console.error('[QUESTION_GENERATION] Failed to get session for token fallback:', sessionError)
+    }
+  }
+
+  // Step 4: If no token, update status to failed and return
+  if (!authToken) {
+    await supabase
+      .from('ideas')
+      .update({
+        status: 'generation_failed',
+        error_message: 'Missing authentication token for question generation',
+        error_occurred_at: new Date().toISOString()
+      })
+      .eq('id', ideaId)
+    
+    return {
+      success: false,
+      error: 'Missing authentication token for question generation'
+    }
+  }
+
+  // Step 5: Start question generation in background (fire and forget)
+  console.log(`[QUESTION_GENERATION] Starting generation for idea ${ideaId}`)
+  
+  generateQuestionsAsync(ideaId, ideaText)
+    .catch((error) => {
+      // Error is already logged and status updated in generateQuestionsAsync
+      console.error(`[QUESTION_GENERATION] Background generation failed for idea ${ideaId}:`, error)
+    })
+
+  return { success: true }
 }
 
 /**

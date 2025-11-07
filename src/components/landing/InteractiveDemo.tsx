@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import RefinementPromptModal from '@/components/dashboard/RefinementPromptModal'
+import { useRefineText } from '@/hooks/useRefineText'
 
 interface IdeaBreakdown {
   id: string
@@ -51,7 +53,10 @@ interface InteractiveDemoProps {
 export default function InteractiveDemo({ onReset }: InteractiveDemoProps) {
   // Idea state
   const [idea, setIdea] = useState('')
-  const [originalIdea, setOriginalIdea] = useState('') // Store original idea for editing
+  const [originalIdea, setOriginalIdea] = useState('')
+  const maxLength = 1000
+  const characterCount = idea.length
+  const isOverLimit = characterCount > maxLength // Store original idea for editing
   
   // Guest session management
   const [guestSessionId, setGuestSessionId] = useState<string | null>(null)
@@ -94,12 +99,28 @@ const PLACEHOLDER_EXAMPLES = [
 ]
 
   // Refinement state
-  const [refinedPreview, setRefinedPreview] = useState('')
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState<string | null>(null)
   const [isRefinementCollapsing, setIsRefinementCollapsing] = useState(false)
-  const previewTimer = useRef<number | null>(null)
-  const lastRefinedIdea = useRef<string>('')
+  const [showRefinementPrompt, setShowRefinementPrompt] = useState(false)
+  const [hasAppliedRefined, setHasAppliedRefined] = useState(false)
+  
+  // Use shared refine-text hook
+  const {
+    refinedPreview,
+    previewLoading,
+    previewError,
+    setRefinedPreview,
+    setPreviewError,
+    lastRefinedIdea
+  } = useRefineText({
+    idea,
+    hasAppliedRefined,
+    onShortIdea: useCallback(() => {
+      // Reset hasAppliedRefined when idea becomes too short
+      if (hasAppliedRefined) {
+        setHasAppliedRefined(false)
+      }
+    }, [hasAppliedRefined])
+  })
 
   // Expansion state for breakdown results
   const [isExpanded, setIsExpanded] = useState(false)
@@ -309,69 +330,12 @@ const PLACEHOLDER_EXAMPLES = [
     return vagueIndicators.some((word) => breakdownText.includes(word))
   }
 
-  // Debounce refine-preview calls to /api/refine-text
+  // Reset hasAppliedRefined when user types new text (different from refined preview)
   useEffect(() => {
-    if (previewTimer.current) {
-      window.clearTimeout(previewTimer.current)
-      previewTimer.current = null
+    if (hasAppliedRefined && idea.trim() !== refinedPreview.trim()) {
+      setHasAppliedRefined(false)
     }
-
-    if (!idea.trim()) {
-      setRefinedPreview('')
-      setPreviewError(null)
-      setPreviewLoading(false)
-      lastRefinedIdea.current = ''
-      return
-    }
-
-    // Count words in the input
-    const wordCount = idea.trim().split(/\s+/).filter(word => word.length > 0).length
-
-    // Start refining quickly, but avoid API calls until user has typed at least 2 words
-    if (wordCount < 2) {
-      // Do not call API yet; avoid flicker by not triggering collapse repeatedly
-      setPreviewError(null)
-      setPreviewLoading(false)
-      return
-    }
-
-    // Skip refinement if the idea is the same as what we last refined
-    // Also skip if the idea matches the current refined preview (user clicked "Use this")
-    if (idea.trim() === lastRefinedIdea.current || idea.trim() === refinedPreview) {
-      return
-    }
-
-    setPreviewError(null)
-    
-    previewTimer.current = window.setTimeout(async () => {
-      setPreviewLoading(true)
-      try {
-        const res = await fetch('/api/refine-text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idea }),
-        })
-        const data = await res.json()
-        if (!res.ok || !data?.success) {
-          throw new Error(data?.error || 'Failed to refine')
-        }
-        setRefinedPreview(data.refinedIdea || '')
-        lastRefinedIdea.current = idea.trim()
-      } catch (e: unknown) {
-        setPreviewError(e instanceof Error ? e.message : 'Unable to refine right now')
-        setRefinedPreview('')
-      } finally {
-        setPreviewLoading(false)
-      }
-    }, 600) // faster feedback while typing
-
-    return () => {
-      if (previewTimer.current) {
-        window.clearTimeout(previewTimer.current)
-        previewTimer.current = null
-      }
-    }
-  }, [idea, refinedPreview]) // Removed previewLoading to prevent infinite loop
+  }, [idea, refinedPreview, hasAppliedRefined])
 
   const handleRefineIdea = async () => {
     if (!idea.trim() || isResetting) {
@@ -381,14 +345,38 @@ const PLACEHOLDER_EXAMPLES = [
 
     console.log('🚀 handleRefineIdea running - this should not happen during reset!')
 
+    // Check if we should show refinement prompt
+    const shouldShowPrompt = () => {
+      return (
+        !hasAppliedRefined &&
+        refinedPreview &&
+        !refinedPreview.startsWith('💡') && // Don't show prompt for guidance messages
+        idea.trim() !== refinedPreview.trim() &&
+        idea.trim().length > 0 &&
+        !previewError // Don't show prompt if refinement failed
+      )
+    }
+
+    if (shouldShowPrompt()) {
+      // Show refinement prompt modal
+      setShowRefinementPrompt(true)
+      return
+    }
+
+    // No prompt needed - proceed with analysis
+    proceedWithBreakdown()
+  }
+
+  const proceedWithBreakdown = async () => {
+    proceedWithBreakdownWithText(refinedPreview.trim() || idea.trim())
+  }
+
+  const proceedWithBreakdownWithText = async (ideaToAnalyze: string) => {
     // Close the refined preview when starting analysis
     setIsRefinementCollapsing(true)
 
     // Store the original idea for editing functionality
     setOriginalIdea(idea.trim())
-
-    // Use the refined preview if available, otherwise use the raw idea
-    const ideaToAnalyze = refinedPreview.trim() || idea.trim()
 
     setBreakdownLoading(true)
     setIsExpanded(true)
@@ -398,7 +386,6 @@ const PLACEHOLDER_EXAMPLES = [
     setTimeout(() => {
       setRefinedPreview('')
       setPreviewError(null)
-      setPreviewLoading(false)
       setIsRefinementCollapsing(false)
       lastRefinedIdea.current = ''
     }, 300) // Match the collapse animation duration
@@ -582,6 +569,45 @@ const PLACEHOLDER_EXAMPLES = [
     // Optional: Add visual feedback for paste
   }
 
+  // Handle refinement prompt responses
+  const handleAcceptRefinement = async () => {
+    try {
+      // Don't allow using guidance messages as refined text
+      if (refinedPreview && !refinedPreview.startsWith('💡')) {
+        const refinedText = refinedPreview
+        setIdea(refinedText)
+        setRefinedPreview('')
+        setHasAppliedRefined(true)
+        setShowRefinementPrompt(false)
+        
+        // Proceed with breakdown after applying refinement
+        // Use the refined text directly
+        setTimeout(() => {
+          proceedWithBreakdownWithText(refinedText)
+        }, 100)
+      }
+    } catch (error) {
+      console.error('Error accepting refinement:', error)
+    }
+  }
+
+  const handleRejectRefinement = async () => {
+    try {
+      const originalText = idea.trim()
+      setShowRefinementPrompt(false)
+      // Mark that we've handled this refinement offer (user rejected it)
+      setHasAppliedRefined(true)
+      setRefinedPreview('')
+      
+      // Proceed with original text
+      setTimeout(() => {
+        proceedWithBreakdownWithText(originalText)
+      }, 100)
+    } catch (error) {
+      console.error('Error rejecting refinement:', error)
+    }
+  }
+
   const handleReset = () => {
     // Simple reset - let Framer Motion handle the smooth transition
     setIsExpanded(false)
@@ -592,7 +618,6 @@ const PLACEHOLDER_EXAMPLES = [
     setCompetitorData(null)
     setRefinedPreview('')
     setPreviewError(null)
-    setPreviewLoading(false)
     setIsRefinementCollapsing(false)
     lastRefinedIdea.current = ''
     setCompetitorError(null)
@@ -632,7 +657,6 @@ const PLACEHOLDER_EXAMPLES = [
     setCompetitorData(null)
     setRefinedPreview('')
     setPreviewError(null)
-    setPreviewLoading(false)
     setIsRefinementCollapsing(false)
     lastRefinedIdea.current = ''
     setCompetitorError(null)
@@ -758,6 +782,7 @@ const PLACEHOLDER_EXAMPLES = [
                 rows={10}
                 value={idea}
                 onChange={(e) => setIdea(e.target.value)}
+                maxLength={maxLength + 50} // Allow some overflow for better UX
                 onKeyDown={(e) => {
                   if ((e.key === 'Enter' && (e.metaKey || e.ctrlKey)) || (e.key === 'Enter' && e.shiftKey === false)) {
                     e.preventDefault()
@@ -767,8 +792,12 @@ const PLACEHOLDER_EXAMPLES = [
                 onPaste={handlePaste}
                 ref={textareaRef}
                 disabled={isInputDisabled}
-                className={`w-full resize-none rounded-2xl border border-neutral-800 focus:border-neutral-700 focus:ring-2 focus:ring-blue-600/40 outline-none p-6 text-base shadow-lg transition-all duration-700 hover:border-neutral-700 hover:shadow-xl relative ${
+                className={`w-full resize-none rounded-2xl border outline-none p-6 text-base shadow-lg transition-all duration-700 hover:shadow-xl relative ${
                   idea.trim() ? 'bg-neutral-900 text-white' : 'bg-transparent text-transparent'
+                } ${
+                  isOverLimit 
+                    ? 'border-red-500/50 focus:border-red-500/70 focus:ring-2 focus:ring-red-500/30' 
+                    : 'border-neutral-800 focus:border-neutral-700 focus:ring-2 focus:ring-blue-600/40 hover:border-neutral-700'
                 } ${isInputDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 style={{
                   caretColor: idea.trim() ? 'white' : 'rgb(156, 163, 175)' // gray-400
@@ -863,9 +892,27 @@ const PLACEHOLDER_EXAMPLES = [
               ) : previewError ? (
                 <p className="text-red-400 text-sm transition-opacity duration-300">{previewError}</p>
               ) : refinedPreview ? (
-                <div className="transition-all duration-300 ease-out animate-[fadeInLeft_0.3s_ease-out_forwards] cursor-pointer hover:bg-neutral-800/30 rounded-lg p-3 -m-3" onClick={() => setIdea(refinedPreview)}>
-                  <p className="text-neutral-300 leading-relaxed italic">&ldquo;{refinedPreview}&rdquo;</p>
-                  <p className="text-neutral-400 text-xs mt-2">Click to use this refined version</p>
+                <div 
+                  className={`transition-all duration-300 ease-out animate-[fadeInLeft_0.3s_ease-out_forwards] rounded-lg p-3 ${
+                    refinedPreview.startsWith('💡')
+                      ? 'bg-amber-500/5 border border-amber-500/30 mt-2'
+                      : 'cursor-pointer hover:bg-neutral-800/30 -m-3'
+                  }`}
+                  onClick={!refinedPreview.startsWith('💡') ? () => setIdea(refinedPreview) : undefined}
+                >
+                  {refinedPreview.startsWith('💡') ? (
+                    // Guidance message (not clickable)
+                    <div className="space-y-1">
+                      <p className="text-xs text-amber-400 mb-1">💡 Suggestion:</p>
+                      <p className="text-neutral-300 leading-relaxed">{refinedPreview.replace('💡 ', '')}</p>
+                    </div>
+                  ) : (
+                    // Refined text (clickable)
+                    <>
+                      <p className="text-neutral-300 leading-relaxed italic">&ldquo;{refinedPreview}&rdquo;</p>
+                      <p className="text-neutral-400 text-xs mt-2">Click to use this refined version</p>
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -876,10 +923,19 @@ const PLACEHOLDER_EXAMPLES = [
       {/* Show button and subtext - only when not expanded */}
       {!isExpanded && (
         <div className="mt-6 flex flex-col items-center">
+          {/* Character count indicator */}
+          {idea.length > 0 && (
+            <div className="mb-3 flex items-center justify-end text-xs">
+              <span className={`${isOverLimit ? 'text-red-400' : 'text-neutral-500'}`}>
+                {characterCount}/{maxLength}
+              </span>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleRefineIdea}
-            disabled={breakdownLoading || !idea.trim()}
+            disabled={breakdownLoading || !idea.trim() || idea.trim().length < 10 || !!(refinedPreview && refinedPreview.startsWith('💡')) || isOverLimit || previewLoading}
             className="relative inline-flex items-center justify-center rounded-xl text-white font-semibold px-4 py-2 sm:px-6 sm:py-3 md:px-8 md:py-4 lg:px-10 lg:py-4 text-xs sm:text-sm md:text-base lg:text-lg shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 w-full sm:w-auto max-w-xs sm:max-w-none transition-all duration-300 hover:shadow-xl hover:scale-105 hover:animate-pulse active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-md btn-sweep overflow-hidden group"
             style={{ 
               background: 'linear-gradient(45deg, #667eea, #764ba2, #667eea)',
@@ -925,6 +981,11 @@ const PLACEHOLDER_EXAMPLES = [
                     <div className="w-1 h-1 bg-white rounded-full animate-[progressDots_1.4s_ease-in-out_infinite]" style={{ animationDelay: '0.2s' }}></div>
                     <div className="w-1 h-1 bg-white rounded-full animate-[progressDots_1.4s_ease-in-out_infinite]" style={{ animationDelay: '0.4s' }}></div>
                   </div>
+                </>
+              ) : previewLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                  <span>✨ Polishing your idea...</span>
                 </>
               ) : (
                 <>
@@ -1720,6 +1781,21 @@ const PLACEHOLDER_EXAMPLES = [
       {isExpanded && (competitorData || competitorError) && (
         <div className="h-12"></div>
       )}
+
+      {/* Refinement Prompt Modal */}
+      <RefinementPromptModal
+        isOpen={showRefinementPrompt}
+        onAccept={handleAcceptRefinement}
+        onReject={handleRejectRefinement}
+        onClose={() => {
+          setShowRefinementPrompt(false)
+          // Mark as handled so we don't show prompt again for this refinement
+          setHasAppliedRefined(true)
+          setRefinedPreview('')
+        }}
+        refinedText={refinedPreview}
+        originalText={idea.trim()}
+      />
     </div>
   )
 }

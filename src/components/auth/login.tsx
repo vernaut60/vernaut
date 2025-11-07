@@ -538,7 +538,7 @@ export default function LoginModal({ isOpen, onClose, mode = 'unlock' }: LoginMo
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                    className="fixed top-0 left-0 right-0 bottom-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    className="fixed top-0 left-0 right-0 bottom-0 z-[55] flex items-center justify-center bg-black/60 p-4"
                 >
                     <motion.div
                         initial={{ opacity: 0, y: 12 }}

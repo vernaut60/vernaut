@@ -29,6 +29,22 @@ export default function TopRisks({ risks }: TopRisksProps) {
     return 'Low'
   }
 
+  const getSeverityColor = (severity: number, maxSeverity: number) => {
+    const percentage = (severity / maxSeverity) * 100
+    if (percentage >= 80) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' // Critical = red
+    if (percentage >= 60) return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' // High = orange
+    if (percentage >= 40) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' // Medium = yellow
+    return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' // Low = green
+  }
+
+  const getSeverityBarColor = (severity: number, maxSeverity: number) => {
+    const percentage = (severity / maxSeverity) * 100
+    if (percentage >= 80) return 'bg-red-400' // Critical = red
+    if (percentage >= 60) return 'bg-orange-400' // High = orange
+    if (percentage >= 40) return 'bg-yellow-400' // Medium = yellow
+    return 'bg-green-400' // Low = green
+  }
+
 
   return (
     <motion.div
@@ -72,10 +88,7 @@ export default function TopRisks({ risks }: TopRisksProps) {
             >
               <div className="flex items-start gap-4">
                 {/* Severity Color Indicator */}
-                <div className={`w-1 h-full rounded-full ${
-                  getSeverityLabel(risk.severity, 10) === 'High' ? 'bg-red-400' :
-                  getSeverityLabel(risk.severity, 10) === 'Medium' ? 'bg-orange-400' : 'bg-yellow-400'
-                }`}></div>
+                <div className={`w-1 h-full rounded-full ${getSeverityBarColor(risk.severity, 10)}`}></div>
                 
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -89,19 +102,21 @@ export default function TopRisks({ risks }: TopRisksProps) {
                     </h3>
                   </div>
                   
-                  <div className="flex items-center gap-4 mb-2">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      getSeverityLabel(risk.severity, 10) === 'High' ? 'bg-red-100 text-red-700' :
-                      getSeverityLabel(risk.severity, 10) === 'Medium' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {getSeverityLabel(risk.severity, 10)} · {risk.severity}/10
+                  <div className="flex items-center gap-4 mb-3 flex-wrap">
+                    <span className={`px-3 py-1 text-xs sm:text-sm font-medium rounded-full ${getSeverityColor(risk.severity, 10)}`}>
+                      {getSeverityLabel(risk.severity, 10)} {risk.severity}/10
                     </span>
-                    <span className="text-xs text-neutral-400">{risk.timeline}</span>
+                    {risk.timeline && (
+                      <span className="text-xs sm:text-sm text-neutral-400">{risk.timeline}</span>
+                    )}
                   </div>
                   
-                  <p className="text-sm text-neutral-300 line-clamp-1">
-                    {risk.why_it_matters}
-                  </p>
+                  {/* Preview text - truncated, only shown when collapsed */}
+                  {expandedRisk !== risk.id && (
+                    <p className="text-sm text-neutral-400 leading-relaxed line-clamp-2">
+                      {risk.why_it_matters}
+                    </p>
+                  )}
                 </div>
                 
                 {/* Expand/Collapse Button */}

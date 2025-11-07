@@ -4,12 +4,14 @@ import React from 'react'
 import { motion } from 'framer-motion'
 
 interface RecommendationProps {
-  decision: 'PROCEED' | 'PIVOT'
+  decision: 'PROCEED' | 'NEEDS_WORK'  // 'PIVOT' removed - replaced with 'NEEDS_WORK'
   confidence: number
   reasoning: string
-  conditions: string[]
+  conditions: string[]  // Note: prop name kept as 'conditions' for backward compatibility, but data comes from 'requirements'
   nextSteps: string[]
+  verdictLabel?: string  // Optional verdict label for display
   callToAction: string
+  riskScore?: number  // Risk score to determine dynamic label
 }
 
 export default function Recommendation({ 
@@ -17,7 +19,9 @@ export default function Recommendation({
   confidence, 
   reasoning, 
   conditions, 
-  nextSteps, 
+  nextSteps,
+  verdictLabel,
+  riskScore,
 }: RecommendationProps) {
   const getDecisionColor = (decision: string) => {
     return decision === 'PROCEED' 
@@ -27,6 +31,57 @@ export default function Recommendation({
 
   const getDecisionIcon = (decision: string) => {
     return decision === 'PROCEED' ? '✅' : '⚠️'
+  }
+  
+  // Display verdict label if available, otherwise use decision
+  const displayLabel = verdictLabel || decision
+
+  // Get dynamic label and description based on risk score
+  // Risk Level -> Label mapping:
+  // 0-4.9: "✅ Recommended Steps" / "Suggestions to strengthen your approach"
+  // 5.0-6.9: "✅ Success Requirements" / "Important steps to maximize your chances"
+  // 7.0-8.4: "📋 Requirements for Success" / "Key milestones to achieve before scaling"
+  // 8.5-10.0: "⚠️ Prerequisites Before Proceeding" / "Essential steps required before building"
+  const getConditionsLabel = (): string => {
+    if (riskScore !== undefined) {
+      if (riskScore >= 0 && riskScore < 5.0) {
+        return '✅ Recommended Steps'
+      } else if (riskScore >= 5.0 && riskScore < 7.0) {
+        return '✅ Success Requirements'
+      } else if (riskScore >= 7.0 && riskScore < 8.5) {
+        return '📋 Requirements for Success'
+      } else if (riskScore >= 8.5) {
+        return '⚠️ Prerequisites Before Proceeding'
+      }
+    }
+    
+    // Fallback based on decision
+    if (decision === 'PROCEED') {
+      return '✅ Recommended Steps'
+    }
+    
+    return '📋 Requirements for Success'
+  }
+
+  const getConditionsDescription = (): string => {
+    if (riskScore !== undefined) {
+      if (riskScore >= 0 && riskScore < 5.0) {
+        return 'Suggestions to strengthen your approach'
+      } else if (riskScore >= 5.0 && riskScore < 7.0) {
+        return 'Important steps to maximize your chances'
+      } else if (riskScore >= 7.0 && riskScore < 8.5) {
+        return 'Key milestones to achieve before scaling'
+      } else if (riskScore >= 8.5) {
+        return 'Essential steps required before building'
+      }
+    }
+    
+    // Fallback
+    if (decision === 'PROCEED') {
+      return 'Suggestions to strengthen your approach'
+    }
+    
+    return 'Key milestones to achieve before scaling'
   }
 
 
@@ -77,7 +132,7 @@ export default function Recommendation({
             transition={{ duration: 0.5, delay: 0.5 }}
             className="text-3xl sm:text-4xl font-bold text-white mb-2"
           >
-            {decision}
+            {displayLabel}
           </motion.h3>
           
           {/* Decision Confidence Display */}
@@ -123,7 +178,7 @@ export default function Recommendation({
         >
           <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
             <span className="text-blue-400">💭</span>
-            Why We Recommend {decision}
+            Why We Recommend {displayLabel}
           </h4>
           <p className="text-neutral-300 leading-relaxed">
             {reasoning}
@@ -137,10 +192,14 @@ export default function Recommendation({
           transition={{ duration: 0.5, delay: 0.8 }}
           className="mb-6"
         >
-          <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-            <span className="text-yellow-400">📋</span>
-            {decision === 'PROCEED' ? 'Conditions for Success' : 'Pivot Requirements'}
-          </h4>
+          <div className="mb-3">
+            <h4 className="text-lg font-semibold text-white mb-1">
+              {getConditionsLabel()}
+            </h4>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              {getConditionsDescription()}
+            </p>
+          </div>
           <div className="space-y-3">
             {conditions.map((condition, index) => (
               <motion.div

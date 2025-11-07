@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import NewIdeaModal from './NewIdeaModal'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
+import { useToast } from '@/contexts/ToastContext'
 
 interface DashboardPageProps {
   onNewIdea?: () => void
@@ -62,13 +63,17 @@ const isWizardInProgress = (idea: Idea): boolean => {
 
 export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
   const router = useRouter()
+  const { addToast } = useToast()
   const [displayName, setDisplayName] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [ideasLoading, setIdeasLoading] = useState(true)
   const [ideasError, setIdeasError] = useState<string | null>(null)
   const [isNewIdeaModalOpen, setIsNewIdeaModalOpen] = useState(false)
+  const [generatingQuestionsFor, setGeneratingQuestionsFor] = useState<Set<string>>(new Set())
   const hasInitialized = useRef(false)
+  const pollIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const pollAttemptsRef = useRef<Map<string, number>>(new Map())
 
   // Extract username from email
   const getUserDisplayName = (email: string): string => {
@@ -89,6 +94,115 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
       return 'Creator'
     }
   }
+
+  // Stop polling for a specific idea
+  const stopPollingForIdea = useCallback((ideaId: string) => {
+    const interval = pollIntervalsRef.current.get(ideaId)
+    if (interval) {
+      clearTimeout(interval)
+      pollIntervalsRef.current.delete(ideaId)
+      pollAttemptsRef.current.delete(ideaId)
+    }
+  }, [])
+
+  // Stop all polling
+  const stopAllPolling = useCallback(() => {
+    pollIntervalsRef.current.forEach((interval) => {
+      clearTimeout(interval)
+    })
+    pollIntervalsRef.current.clear()
+    pollAttemptsRef.current.clear()
+  }, [])
+
+  // Poll a single idea for status updates
+  const pollIdeaStatus = useCallback(async (idea: Idea) => {
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) {
+        stopPollingForIdea(idea.id)
+        return
+      }
+
+      const response = await fetch(`/api/ideas/${idea.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        // Continue polling on error (might be temporary)
+        return
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.idea) {
+        // Check if status changed
+        if (data.idea.status === 'complete' || data.idea.status === 'stage1_failed') {
+          // Status changed - update the idea in state
+          setIdeas(prevIdeas => 
+            prevIdeas.map(prevIdea => 
+              prevIdea.id === idea.id 
+                ? { ...prevIdea, status: data.idea.status, score: data.idea.score, risk_score: data.idea.risk_score }
+                : prevIdea
+            )
+          )
+          // Stop polling for this idea
+          stopPollingForIdea(idea.id)
+          return
+        }
+
+        // Still generating, continue polling
+        if (data.idea.status === 'generating_stage1') {
+          // Calculate next poll delay with exponential backoff
+          const attempt = pollAttemptsRef.current.get(idea.id) || 0
+          const delays = [5000, 8000, 10000, 12000] // 5s, 8s, 10s, 12s (slower for dashboard)
+          const baseDelay = delays[Math.min(attempt, delays.length - 1)]
+          // Add 20% jitter to reduce synchronized spikes
+          const jitter = 0.8 + Math.random() * 0.4
+          const delay = Math.round(baseDelay * jitter)
+          
+          pollAttemptsRef.current.set(idea.id, attempt + 1)
+          
+          // Schedule next poll
+          const interval = setTimeout(() => pollIdeaStatus(idea), delay)
+          pollIntervalsRef.current.set(idea.id, interval)
+        }
+      }
+    } catch (err) {
+      // Network error, continue polling
+      console.warn(`[Dashboard] Poll error for idea ${idea.id}, will retry:`, err)
+    }
+  }, [stopPollingForIdea])
+
+  // Start polling for ideas with generating_stage1 status
+  const startPollingForGeneratingIdeas = useCallback(() => {
+    // Stop all existing polling first
+    stopAllPolling()
+    
+    // Find ideas that are generating
+    const generatingIdeas = ideas.filter(idea => idea.status === 'generating_stage1')
+    
+    if (generatingIdeas.length === 0) return
+
+    // Start polling for each generating idea (staggered start to avoid spikes)
+    generatingIdeas.forEach((idea, index) => {
+      // Stagger initial polls: 0ms, 1000ms, 2000ms, etc.
+      const initialDelay = index * 1000
+      
+      pollAttemptsRef.current.set(idea.id, 0)
+      
+      const interval = setTimeout(() => {
+        pollIdeaStatus(idea)
+      }, initialDelay)
+      
+      pollIntervalsRef.current.set(idea.id, interval)
+    })
+  }, [ideas, pollIdeaStatus, stopAllPolling])
 
   // Fetch user's ideas
   const fetchUserIdeas = async (): Promise<number> => {
@@ -244,6 +358,40 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
     }
   }, [])
 
+  // Start polling for generating ideas when ideas state changes
+  useEffect(() => {
+    if (ideas.length > 0 && !ideasLoading) {
+      startPollingForGeneratingIdeas()
+    }
+  }, [ideas, ideasLoading, startPollingForGeneratingIdeas])
+
+  // Page Visibility API: Pause/resume polling when tab is hidden/visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab hidden - pause all polling
+        stopAllPolling()
+      } else {
+        // Tab visible - resume polling for generating ideas
+        if (ideas.length > 0 && !ideasLoading) {
+          startPollingForGeneratingIdeas()
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [ideas, ideasLoading, startPollingForGeneratingIdeas, stopAllPolling])
+
+  // Cleanup all polling on unmount
+  useEffect(() => {
+    return () => {
+      stopAllPolling()
+    }
+  }, [stopAllPolling])
+
   const handleNewIdea = () => {
     setIsNewIdeaModalOpen(true)
     onNewIdea?.()
@@ -251,6 +399,71 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
 
   const handleCloseModal = () => {
     setIsNewIdeaModalOpen(false)
+  }
+
+  // Handle starting question generation for draft ideas
+  const handleStartQuestionGeneration = async (ideaId: string) => {
+    // Prevent duplicate requests
+    if (generatingQuestionsFor.has(ideaId)) {
+      return
+    }
+
+    try {
+      setGeneratingQuestionsFor(prev => new Set(prev).add(ideaId))
+
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        throw new Error('Authentication required')
+      }
+
+      const response = await fetch(`/api/ideas/${ideaId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 'generating_questions'
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to start question generation')
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Update idea status in local state
+        setIdeas(prevIdeas =>
+          prevIdeas.map(idea =>
+            idea.id === ideaId
+              ? { ...idea, status: 'generating_questions' }
+              : idea
+          )
+        )
+
+        // Redirect to wizard page
+        router.push(`/ideas/${ideaId}/wizard`)
+      } else {
+        throw new Error(data.message || 'Failed to start question generation')
+      }
+    } catch (error) {
+      console.error('Error starting question generation:', error)
+      addToast(
+        error instanceof Error ? error.message : 'Failed to start question generation. Please try again.',
+        'error'
+      )
+    } finally {
+      setGeneratingQuestionsFor(prev => {
+        const next = new Set(prev)
+        next.delete(ideaId)
+        return next
+      })
+    }
   }
 
   return (
@@ -620,9 +833,22 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                       subMessage: string
                       buttonText: string
                       route: string
+                      isAction?: boolean // Flag to trigger action instead of just routing
                     }
 
                     switch (idea.status) {
+                      case 'draft':
+                        statusConfig = {
+                          icon: '✨',
+                          badge: 'Ready to Start',
+                          badgeColor: 'bg-[var(--color-success)]/20 text-[var(--color-success)] border-[var(--color-success)]/30',
+                          message: 'Your idea is ready!',
+                          subMessage: 'Answer questions to get your personalized analysis',
+                          buttonText: generatingQuestionsFor.has(idea.id) ? 'Starting...' : 'Start Assessment',
+                          route: `/ideas/${idea.id}/wizard`,
+                          isAction: true // Flag to trigger question generation instead of just routing
+                        }
+                        break
                       case 'generating_questions':
                         statusConfig = {
                           icon: '🔄',
@@ -731,13 +957,14 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                           <div className="mb-3">
                             <p className="text-[var(--color-text)] font-medium mb-1">{statusConfig.message}</p>
                             {/* Only show subMessage if not showing progress bar (to avoid duplication) */}
-                            {!(progress.total > 0 && (idea.status === 'questions_ready' || idea.status === 'generating_stage1')) && (
+                            {/* Don't show progress bar for generating_stage1 - questions are already complete */}
+                            {!(progress.total > 0 && idea.status === 'questions_ready' && inProgress) && (
                               <p className="text-[var(--color-text-muted)] text-sm">{statusConfig.subMessage}</p>
                             )}
                           </div>
                           
-                          {/* Progress bar - show for wizard states with questions */}
-                          {progress.total > 0 && (idea.status === 'questions_ready' || idea.status === 'generating_stage1') && (
+                          {/* Progress bar - only show for questions_ready when in progress (not for generating_stage1) */}
+                          {progress.total > 0 && idea.status === 'questions_ready' && inProgress && (
                             <div className="mb-4">
                               <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mb-1.5">
                                 <span>📝 {progress.answered} of {progress.total} questions answered</span>
@@ -777,8 +1004,15 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                             className="w-full text-sm py-2 px-4"
                             onClick={(e) => {
                               e.stopPropagation()
-                              router.push(statusConfig.route)
+                              if (statusConfig.isAction && idea.status === 'draft') {
+                                // Trigger question generation for draft ideas
+                                handleStartQuestionGeneration(idea.id)
+                              } else {
+                                // Normal routing for other statuses
+                                router.push(statusConfig.route)
+                              }
                             }}
+                            disabled={generatingQuestionsFor.has(idea.id)}
                           >
                             {statusConfig.buttonText} →
                           </Button>

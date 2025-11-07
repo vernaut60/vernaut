@@ -2,21 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 
-// Response validation schema
+// Response validation schema (flexible to support conditional fields)
 const getIdeaResponseSchema = z.object({
   success: z.boolean(),
   idea: z.object({
     id: z.string(),
     status: z.string(),
     idea_text: z.string(),
+    // Wizard fields (optional - only when requested or wizard active)
     questions: z.array(z.unknown()).nullable().optional(),
     wizard_answers: z.record(z.unknown()).optional(),
     current_step: z.number().optional(),
     total_questions: z.number().nullable().optional(),
     questions_generated_at: z.string().nullable().optional(),
     wizard_completed_at: z.string().nullable().optional(),
+    // Stage 1 fields (optional - only when requested or complete)
+    score: z.number().nullable().optional(),
+    risk_score: z.number().nullable().optional(),
+    risk_analysis: z.record(z.unknown()).nullable().optional(),
+    ai_insights: z.record(z.unknown()).nullable().optional(),
+    problem: z.string().nullable().optional(),
+    audience: z.string().nullable().optional(),
+    solution: z.string().nullable().optional(),
+    monetization: z.string().nullable().optional(),
+    title: z.string().nullable().optional(),
+    // Competitors (optional - only when requested)
+    competitors: z.array(z.unknown()).optional(),
+    // Timestamps
     created_at: z.string(),
     updated_at: z.string().nullable().optional(),
+    // Error fields
     error_message: z.string().nullable().optional(),
     error_occurred_at: z.string().nullable().optional()
   })
@@ -25,7 +40,8 @@ const getIdeaResponseSchema = z.object({
 // PATCH request validation schema
 const patchIdeaSchema = z.object({
   wizard_answers: z.record(z.unknown()).optional(),
-  current_step: z.number().min(0).optional()
+  current_step: z.number().min(0).optional(),
+  status: z.enum(['generating_questions']).optional() // Only allow draft -> generating_questions transition
 })
 
 // PATCH response validation schema
@@ -74,15 +90,24 @@ const logInfo = (message: string, context: Record<string, unknown> = {}) => {
 /**
  * GET /api/ideas/[id]
  * 
- * Fetches a single idea with wizard data.
- * Used for polling to check status and retrieve questions.
+ * Fetches a single idea with conditional data based on status and query parameters.
+ * 
+ * Query Parameters:
+ * - ?include=wizard,stage1,competitors (comma-separated, all optional)
+ * 
+ * Default Behavior (smart defaults based on status):
+ * - Wizard active (status in ['generating_questions', 'questions_ready', 'generation_failed']):
+ *   → Includes wizard data (questions, answers, current_step)
+ * - Stage 1 complete (status = 'complete'):
+ *   → Includes stage1 data + competitors
+ * - Stage 1 generating/failed:
+ *   → Minimal data (just status)
  * 
  * Returns:
- * - All idea fields including status
- * - questions array (only when status = "questions_ready")
- * - wizard_answers (current saved answers)
- * - current_step, total_questions
- * - Timestamps (created_at, questions_generated_at, etc.)
+ * - Core idea fields (always)
+ * - Wizard fields (when requested or wizard active)
+ * - Stage 1 fields (when requested or complete)
+ * - Competitors (when requested or stage1 complete)
  */
 export async function GET(
   request: NextRequest,
@@ -99,7 +124,12 @@ export async function GET(
       }, { status: 400 })
     }
 
-    // Step 2: Authenticate user
+    // Step 2: Parse query parameters (Next.js 15 pattern: use URL constructor)
+    const { searchParams } = new URL(request.url)
+    const includeParam = searchParams.get('include')
+    const requestedIncludes = includeParam ? includeParam.split(',').map(s => s.trim()) : []
+
+    // Step 3: Authenticate user
     const authHeader = request.headers.get('Authorization')
     const supabase = await createAuthenticatedClient(authHeader)
     
@@ -115,7 +145,7 @@ export async function GET(
 
     const userId = user.id
 
-    // Step 3: Fetch idea and verify ownership
+    // Step 4: Fetch idea and verify ownership (include all fields we might need)
     const { data: idea, error: fetchError } = await supabase
       .from('ideas')
       .select(`
@@ -128,6 +158,15 @@ export async function GET(
         total_questions,
         questions_generated_at,
         wizard_completed_at,
+        score,
+        risk_score,
+        risk_analysis,
+        ai_insights,
+        problem,
+        audience,
+        solution,
+        monetization,
+        title,
         created_at,
         updated_at,
         error_message,
@@ -188,43 +227,99 @@ export async function GET(
       }
     }
 
-    // Step 5: Transform data based on status
-    // Only include questions when status indicates questions have been generated
-    const STATUSES_WITH_QUESTIONS = [
-      'questions_ready',
-      'generating_stage1',
-      'stage1_failed',
-      'complete'
-    ]
-
-    const response = {
+    // Step 5: Determine what to include based on status and query params
+    // Status groups for conditional logic
+    const WIZARD_STATUSES = ['generating_questions', 'questions_ready', 'generation_failed']
+    const STAGE1_COMPLETE_STATUS = 'complete'
+    
+    // Smart defaults based on status
+    const isWizardActive = WIZARD_STATUSES.includes(idea.status)
+    const isStage1Complete = idea.status === STAGE1_COMPLETE_STATUS && !!idea.score
+    
+    // Determine final includes (query params override defaults)
+    const defaultIncludes = isWizardActive 
+      ? ['wizard'] 
+      : isStage1Complete 
+        ? ['stage1', 'competitors'] 
+        : []
+    
+    const finalIncludes = requestedIncludes.length > 0 ? requestedIncludes : defaultIncludes
+    
+    // Step 6: Build base response with core fields
+    const response: {
+      success: boolean
+      idea: Record<string, unknown>
+    } = {
       success: true,
       idea: {
         id: idea.id,
         status: idea.status,
         idea_text: idea.idea_text,
-        // Only include questions when status indicates they've been generated
-        ...(STATUSES_WITH_QUESTIONS.includes(idea.status)
-          ? { questions: idea.questions || null }
-          : {}),
-        wizard_answers: idea.wizard_answers || {},
-        current_step: idea.current_step ?? 0,
-        total_questions: idea.total_questions ?? null,
-        questions_generated_at: idea.questions_generated_at ?? null,
-        wizard_completed_at: idea.wizard_completed_at ?? null,
         created_at: idea.created_at,
-        updated_at: idea.updated_at ?? null,
-        ...(idea.error_message ? {
-          error_message: idea.error_message,
-          error_occurred_at: idea.error_occurred_at ?? null
-        } : {})
+        updated_at: idea.updated_at ?? null
       }
     }
+    
+    // Step 7: Conditionally include wizard data
+    // Include if in finalIncludes (either requested or default based on status)
+    if (finalIncludes.includes('wizard')) {
+      response.idea.questions = idea.questions || null
+      response.idea.wizard_answers = idea.wizard_answers || {}
+      response.idea.current_step = idea.current_step ?? 0
+      response.idea.total_questions = idea.total_questions ?? null
+      response.idea.questions_generated_at = idea.questions_generated_at ?? null
+      response.idea.wizard_completed_at = idea.wizard_completed_at ?? null
+    }
+    
+    // Step 8: Conditionally include Stage 1 data
+    if (finalIncludes.includes('stage1')) {
+      if (idea.score !== null) response.idea.score = idea.score
+      if (idea.risk_score !== null) response.idea.risk_score = idea.risk_score
+      if (idea.risk_analysis) response.idea.risk_analysis = idea.risk_analysis
+      if (idea.ai_insights) response.idea.ai_insights = idea.ai_insights
+      if (idea.problem) response.idea.problem = idea.problem
+      if (idea.audience) response.idea.audience = idea.audience
+      if (idea.solution) response.idea.solution = idea.solution
+      if (idea.monetization) response.idea.monetization = idea.monetization
+      if (idea.title) response.idea.title = idea.title
+      // Include wizard_completed_at to determine if fields are from demo or wizard
+      if (idea.wizard_completed_at !== undefined) {
+        response.idea.wizard_completed_at = idea.wizard_completed_at ?? null
+      }
+    }
+    
+    // Step 9: Conditionally fetch and include competitors
+    if (finalIncludes.includes('competitors')) {
+      try {
+        const { data: competitors, error: competitorsError } = await supabase
+          .from('competitors')
+          .select('*')
+          .eq('idea_id', ideaId)
+          .order('threat_level', { ascending: false })
+        
+        if (!competitorsError && competitors) {
+          response.idea.competitors = competitors
+        }
+      } catch (competitorsErr) {
+        logError('Failed to fetch competitors', {
+          ideaId,
+          error: competitorsErr instanceof Error ? competitorsErr.message : String(competitorsErr)
+        })
+        // Don't fail the request if competitors fetch fails
+        response.idea.competitors = []
+      }
+    }
+    
+    // Step 10: Include error fields if present
+    if (idea.error_message) {
+      response.idea.error_message = idea.error_message
+      response.idea.error_occurred_at = idea.error_occurred_at ?? null
+    }
 
-    // Step 6: Validate response
+    // Step 11: Validate response
     const validatedResponse = getIdeaResponseSchema.parse(response)
     
-    // Step 7: Create response and set headers
+    // Step 12: Create response and set headers
     const httpResponse = NextResponse.json(validatedResponse)
     
     // Cache control based on generation status
@@ -329,10 +424,10 @@ export async function PATCH(
     const validatedInput = patchIdeaSchema.parse(body)
     
     // Must provide at least one field to update
-    if (!validatedInput.wizard_answers && validatedInput.current_step === undefined) {
+    if (!validatedInput.wizard_answers && validatedInput.current_step === undefined && !validatedInput.status) {
       return NextResponse.json({
         success: false,
-        message: 'Must provide wizard_answers or current_step to update'
+        message: 'Must provide wizard_answers, current_step, or status to update'
       }, { status: 400 })
     }
 
@@ -428,7 +523,7 @@ export async function PATCH(
     try {
       const fetchResult = await supabase
         .from('ideas')
-        .select('id, status, wizard_answers, current_step, user_id, updated_at')
+        .select('id, status, wizard_answers, current_step, user_id, updated_at, idea_text')
         .eq('id', ideaId)
         .eq('user_id', userId)
         .single()
@@ -503,7 +598,61 @@ export async function PATCH(
       }, { status: 404 })
     }
 
-    // Step 5: Validate status - only allow updates when questions are ready
+    // Step 5: Handle status update (draft -> generating_questions)
+    if (validatedInput.status === 'generating_questions') {
+      // Only allow status update if current status is 'draft'
+      if (idea.status !== 'draft') {
+        return NextResponse.json({
+          success: false,
+          message: `Cannot start question generation. Idea status is "${idea.status}". Only draft ideas can start question generation.`
+        }, { status: 400 })
+      }
+
+      // Use idea_text from already-fetched idea
+      const ideaText = (idea.idea_text as string) || ''
+      
+      if (!ideaText) {
+        logError('Idea text is missing for question generation', { ideaId })
+        return NextResponse.json({
+          success: false,
+          message: 'Idea text is required for question generation'
+        }, { status: 400 })
+      }
+
+      // Import and use shared utility
+      const { startQuestionGeneration } = await import('@/lib/questionGeneration')
+      
+      const generationResult = await startQuestionGeneration(
+        ideaId,
+        ideaText,
+        userId,
+        supabase,
+        authHeader
+      )
+
+      if (!generationResult.success) {
+        const statusCode = generationResult.error?.includes('too many') ? 429 : 500
+        return NextResponse.json({
+          success: false,
+          message: generationResult.error || 'Failed to start question generation'
+        }, { status: statusCode })
+      }
+
+      // Fetch updated idea to get new updated_at
+      const { data: updatedIdea } = await supabase
+        .from('ideas')
+        .select('updated_at')
+        .eq('id', ideaId)
+        .single()
+
+      return NextResponse.json({
+        success: true,
+        updated_at: updatedIdea?.updated_at || new Date().toISOString()
+      })
+    }
+
+    // Step 6: Handle normal wizard updates (wizard_answers, current_step)
+    // Validate status - only allow updates when questions are ready
     const allowedStatuses = ['questions_ready', 'generating_stage1', 'stage1_failed', 'complete']
     if (!allowedStatuses.includes(idea.status)) {
       return NextResponse.json({
@@ -512,7 +661,7 @@ export async function PATCH(
       }, { status: 400 })
     }
 
-    // Step 6: Prepare update data
+    // Step 7: Prepare update data
     const updateData: {
       wizard_answers?: Record<string, unknown>
       current_step?: number
@@ -532,7 +681,7 @@ export async function PATCH(
       updateData.current_step = validatedInput.current_step
     }
 
-    // Step 7: Update idea in database (with timeout handling)
+    // Step 8: Update idea in database (with timeout handling)
     let updatedIdea
     let updateError
     
