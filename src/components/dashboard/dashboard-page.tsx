@@ -464,7 +464,7 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
         // If parallel execution fails, try fetchUserIdeas individually as fallback
         console.error('Error in parallel initialization:', error)
         try {
-          await fetchUserIdeas()
+        await fetchUserIdeas()
         } catch (fetchError) {
           console.error('Failed to fetch ideas:', fetchError)
         }
@@ -776,8 +776,8 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                         className="self-start sm:self-auto relative overflow-hidden group"
                       >
                         <Button onClick={handleNewIdea} className="relative">
-                          <span className="mr-2 relative z-10">+</span>
-                          <span className="relative z-10">New Idea</span>
+                        <span className="mr-2 relative z-10">+</span>
+                        <span className="relative z-10">New Idea</span>
                         </Button>
                       </motion.div>
                     )}
@@ -892,8 +892,8 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                       whileTap={{ scale: 0.95 }}
                     >
                       <Button onClick={handleNewIdea} className="text-lg px-8 py-4">
-                        <span className="mr-2">💡</span>
-                        <span>Create Your First Idea</span>
+                      <span className="mr-2">💡</span>
+                      <span>Create Your First Idea</span>
                       </Button>
                     </motion.div>
                   </div>
@@ -904,16 +904,16 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                     // Render complete card (existing) if status is complete
                     if (idea.status === 'complete') {
                       return (
-                        <motion.div 
-                          key={idea.id} 
-                          initial={{ opacity: 0, y: 20 }} 
-                          animate={{ opacity: 1, y: 0 }} 
-                          transition={{ duration: 0.5, delay: index * 0.1 }} 
+                      <motion.div 
+                        key={idea.id} 
+                        initial={{ opacity: 0, y: 20 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        transition={{ duration: 0.5, delay: index * 0.1 }} 
                           className="group relative surface-card transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-pointer overflow-hidden"
-                          onClick={() => router.push(`/ideas/${idea.id}`)}
-                        >
+                        onClick={() => router.push(`/ideas/${idea.id}`)}
+                      >
                           {/* Header with title and delete button */}
-                          <div className="flex items-start justify-between p-4 pb-2">
+                      <div className="flex items-start justify-between p-4 pb-2">
                             <h3 className="text-[var(--color-text)] font-medium text-lg line-clamp-2 flex-1 pr-2">{idea.title}</h3>
                             <div onClick={(e) => e.stopPropagation()}>
                               <DeleteIdeaButton
@@ -922,59 +922,59 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                                 onDeleteSuccess={handleIdeaDeleted}
                               />
                             </div>
-                          </div>
-                          
-                          {/* Divider line */}
+                      </div>
+                      
+                      {/* Divider line */}
                           <div className="mx-4 h-px divider-subtle"></div>
-                          
-                          {/* Content area */}
-                          <div className="p-4 pt-3">
-                            {/* Score and Risk indicators */}
-                            <div className="flex items-center gap-3 mb-4">
-                              {idea.score !== null && idea.score !== undefined && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-2xl">💡</span>
-                                  <span className={`${
-                                    idea.score > 85 ? 'text-emerald-400' :
-                                    idea.score > 70 ? 'text-green-400' :
-                                    idea.score > 55 ? 'text-yellow-400' :
-                                    idea.score > 40 ? 'text-orange-400' :
-                                    'text-red-400'
-                                  } font-semibold`}>{idea.score}%</span>
+                      
+                      {/* Content area */}
+                      <div className="p-4 pt-3">
+                        {/* Score and Risk indicators */}
+                        <div className="flex items-center gap-3 mb-4">
+                          {idea.score !== null && idea.score !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">💡</span>
+                              <span className={`${
+                                idea.score > 85 ? 'text-emerald-400' :
+                                idea.score > 70 ? 'text-green-400' :
+                                idea.score > 55 ? 'text-yellow-400' :
+                                idea.score > 40 ? 'text-orange-400' :
+                                'text-red-400'
+                              } font-semibold`}>{idea.score}%</span>
                                   <span className="text-[var(--color-text-muted)] text-sm">
-                                    {idea.score >= 85 ? 'Exceptional' :
-                                     idea.score >= 70 ? 'Strong' :
-                                     idea.score >= 55 ? 'Promising' :
-                                     idea.score >= 40 ? 'Needs Focus' :
-                                     'Early'}
-                                  </span>
-                                </div>
-                              )}
-                              {idea.risk_score && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-2xl">⚠️</span>
-                                  <span className={`font-semibold ${
-                                    idea.risk_score <= 4.0 ? 'text-green-400' :
-                                    idea.risk_score <= 6.9 ? 'text-amber-400' :
-                                    'text-red-400'
-                                  }`}>{idea.risk_score}</span>
-                                  <span className="text-[var(--color-text-muted)] text-sm">
-                                    {idea.risk_level} Risk
-                                  </span>
-                                </div>
-                              )}
+                                {idea.score >= 85 ? 'Exceptional' :
+                                 idea.score >= 70 ? 'Strong' :
+                                 idea.score >= 55 ? 'Promising' :
+                                 idea.score >= 40 ? 'Needs Focus' :
+                                 'Early'}
+                              </span>
                             </div>
-                            
-                            {/* Created date */}
+                          )}
+                          {idea.risk_score && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">⚠️</span>
+                              <span className={`font-semibold ${
+                                idea.risk_score <= 4.0 ? 'text-green-400' :
+                                idea.risk_score <= 6.9 ? 'text-amber-400' :
+                                'text-red-400'
+                              }`}>{idea.risk_score}</span>
+                                  <span className="text-[var(--color-text-muted)] text-sm">
+                                {idea.risk_level} Risk
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Created date */}
                             <div className="text-xs text-[var(--color-text-muted)] mb-4">
-                              Created: {new Date(idea.created_at).toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric', 
-                                year: 'numeric' 
-                              })}
-                            </div>
-                            
-                            {/* View Analysis button */}
+                          Created: {new Date(idea.created_at).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })}
+                        </div>
+                        
+                        {/* View Analysis button */}
                             <Button 
                               className="w-full text-sm py-2 px-4"
                               onClick={(e) => {
@@ -984,8 +984,8 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                             >
                               View Results →
                             </Button>
-                          </div>
-                        </motion.div>
+                      </div>
+                    </motion.div>
                       )
                     }
 
@@ -1106,7 +1106,7 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                               ideaTitle={idea.title}
                               onDeleteSuccess={handleIdeaDeleted}
                             />
-                          </div>
+                </div>
                         </div>
                         
                         {/* Divider line */}
@@ -1195,7 +1195,7 @@ export default function DashboardPage({ onNewIdea }: DashboardPageProps) {
                                   <p className="text-xs text-[var(--color-text-muted)]">
                                     Your answers will personalize the analysis with your budget, market, and approach.
                                   </p>
-                                </div>
+              </div>
                               </div>
                             </motion.div>
                           )}

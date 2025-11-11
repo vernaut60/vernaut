@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { SectionHeader } from '../common'
 
 interface Risk {
   id: string
@@ -54,22 +55,15 @@ export default function TopRisks({ risks }: TopRisksProps) {
       className="mb-8"
     >
       {/* Section Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
+      <SectionHeader
+        title="Top Risks & Mitigation"
+        description="Based on your risk analysis above, here are your TOP 3 RISKS to address:"
+        gradientFrom="from-orange-400"
+        gradientTo="to-red-400"
+        titleClassName="text-2xl sm:text-3xl"
+        descriptionClassName="ml-4"
         className="mb-8"
-      >
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-1 h-8 bg-gradient-to-b from-orange-400 to-red-400 rounded-full"></div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white">
-            Top Risks & Mitigation
-          </h2>
-        </div>
-        <p className="text-neutral-400 text-sm sm:text-base ml-4">
-          Based on your risk analysis above, here are your TOP 3 RISKS to address:
-        </p>
-      </motion.div>
+      />
 
       {/* Risk Cards */}
       <div className="space-y-4">

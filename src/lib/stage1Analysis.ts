@@ -127,123 +127,161 @@ function calculateRiskScore(categoryScores: {
   return Math.round(weightedScore * 10) / 10
 }
 
-// Extract company name from title or URL
+// Extract company name from title or URL (handles articles AND page titles)
 function extractCompanyName(title: string, url: string): string {
-  // Try title first (e.g., "Stripe: Payment Processing" → "Stripe")
-  const titleMatch = title.match(/^([^:–—]+)/)
-  if (titleMatch) {
-    return titleMatch[1].trim()
-  }
-
-  // Fallback to domain name
   try {
-    const domain = new URL(url).hostname
-    return domain.replace(/^www\./, '').split('.')[0]
+    const urlObj = new URL(url)
+    const hostname = urlObj.hostname.replace(/^www\./, '')
+    const domain = hostname.split('.')[0]
+    
+    // List of domains that are article/news/review sites (not company sites)
+    const articleSites = [
+      'techcrunch', 'forbes', 'businessinsider', 'theverge', 'wired',
+      'reuters', 'bloomberg', 'cnbc', 'venturebeat', 'mashable',
+      'engadget', 'arstechnica', 'zdnet', 'cnet', 'medium', 'gartner',
+      'capterra', 'g2', 'trustradius', 'softwareadvice', 'getapp',
+      'expertmarket', 'efficient', 'superagi', 'lucid',
+      'visitcalifornia', 'tripadvisor', 'yelp', 'producthunt'  // ← Added location/review sites
+    ]
+    
+    const isArticleSite = articleSites.includes(domain.toLowerCase())
+    
+    // List of generic page title keywords that indicate this is a PAGE, not the company name
+    const genericPageWords = [
+      'tour', 'tours', 'visit', 'book', 'booking', 'reservation',
+      'about', 'contact', 'services', 'products', 'home', 'welcome',
+      'experience', 'education', 'learn', 'center', 'shop', 'store',
+      'blog', 'news', 'events', 'gallery', 'testimonials', 'faq'
+    ]
+    
+    // Helper: Check if title is likely a page title (not company name)
+    const isGenericPageTitle = (text: string): boolean => {
+      const words = text.toLowerCase().split(/\s+/)
+      // If 50%+ of words are generic page words, it's likely a page title
+      const genericWordCount = words.filter(word => 
+        genericPageWords.some(generic => word.includes(generic))
+      ).length
+      return genericWordCount >= Math.ceil(words.length * 0.5)
+    }
+    
+    // If this is an article site, extract company name from title or URL
+    if (isArticleSite) {
+      // Pattern 1: "... - CompanyName" (e.g., "Top 7 Competitors - Brex")
+      const dashPattern = title.match(/\s*[-–—]\s*([A-Z][A-Za-z0-9\s&.]+)$/i)
+      if (dashPattern) {
+        const extracted = dashPattern[1].trim()
+        const genericPhrases = ['and more', 'comparison', 'review', 'guide', 'blog', 'article']
+        if (!genericPhrases.some(phrase => extracted.toLowerCase().includes(phrase))) {
+          return extracted
+        }
+      }
+      
+      // Pattern 2: "CompanyName: Description" (e.g., "Stripe: Payment Processing")
+      const colonPattern = title.match(/^([A-Z][A-Za-z0-9\s&.]+?)\s*[:\-–—]/)
+      if (colonPattern) {
+        return colonPattern[1].trim()
+      }
+      
+      // Pattern 3: Extract from URL path
+      const pathSegments = urlObj.pathname.split('/').filter(s => s.length > 0)
+      for (const segment of pathSegments) {
+        const words = segment.split('-').filter(w => w.length > 2)
+        if (words.length > 0 && words.length < 4) {
+          const companyName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+          if (companyName.length > 2 && !isGenericPageTitle(companyName)) {
+            return companyName
+          }
+        }
+      }
+      
+      // Fallback: Use domain name
+      return domain.charAt(0).toUpperCase() + domain.slice(1)
+    }
+    
+    // For actual company websites (non-article sites)
+    // CRITICAL: Check if title is a generic page title first
+    const titleMatch = title.match(/^([^:–—\-\|]+)/)
+    if (titleMatch) {
+      const extracted = titleMatch[1].trim()
+      
+      // If title is short, capitalized, AND not a generic page title → use it
+      if (extracted.length < 50 && 
+          /^[A-Z]/.test(extracted) && 
+          !isGenericPageTitle(extracted)) {
+        return extracted
+      }
+    }
+    
+    // Title is generic or too long → Extract company name from domain
+    // Convert domain to readable company name
+    // e.g., "temalpakhfarm" → "Temalpakh Farm"
+    //       "bharatvarshnaturefarms" → "Bharatvarsh Nature Farms"
+    
+    // Try to split camelCase or compound words intelligently
+    let companyName = domain
+    
+    // Strategy 1: Look for common suffixes and split there
+    const commonSuffixes = ['farm', 'farms', 'tours', 'tour', 'co', 'inc', 'llc', 'corp']
+    for (const suffix of commonSuffixes) {
+      if (domain.toLowerCase().endsWith(suffix)) {
+        const baseName = domain.slice(0, -suffix.length)
+        const suffixPart = domain.slice(-suffix.length)
+        companyName = baseName.charAt(0).toUpperCase() + baseName.slice(1) + ' ' +
+                     suffixPart.charAt(0).toUpperCase() + suffixPart.slice(1)
+        return companyName
+      }
+    }
+    
+    // Strategy 2: Just capitalize first letter if nothing else works
+    return domain.charAt(0).toUpperCase() + domain.slice(1)
+    
   } catch {
+    // If URL parsing fails, use title
+    const titleMatch = title.match(/^([^:–—\-\|]+)/)
+    if (titleMatch) {
+      return titleMatch[1].trim()
+    }
     return title
   }
 }
 
 
-// Helper: Check if a URL is from a news/article site
-function isNewsSite(url: string | undefined): boolean {
-  if (!url) return false
-  
+// Normalize URL for deduplication - extract ONLY the domain
+function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url)
-    const hostname = parsed.hostname.replace(/^www\./, '').toLowerCase()
-    const rootDomain = hostname.split('.')[0]
-    
-    const newsSites = [
-      'techcrunch', 'forbes', 'businessinsider', 'theverge', 'wired',
-      'reuters', 'bloomberg', 'cnbc', 'venturebeat', 'mashable',
-      'engadget', 'arstechnica', 'zdnet', 'cnet', 'medium',
-      'linkedin', 'twitter', 'facebook', 'reddit', 'quora'
-    ]
-    
-    return newsSites.includes(rootDomain)
+    // Remove www., keep ONLY hostname (no path, no protocol)
+    return parsed.hostname.replace(/^www\./, '').toLowerCase()
   } catch {
-    return false
+    // If URL parsing fails, normalize manually
+    return url.toLowerCase()
+      .replace(/^(https?:\/\/)?(www\.)?/, '') // Remove protocol and www
+      .replace(/\/.*$/, '') // Remove everything after first slash
   }
 }
 
-// Deduplicate competitors by company name AND website (improved logic)
+// Deduplicate competitors by domain (simplified)
 function deduplicateCompetitors(competitors: CompetitorCandidate[]): CompetitorCandidate[] {
-  const seen = new Map<string, CompetitorCandidate>()
+  const seenDomains = new Map<string, CompetitorCandidate>()
 
   for (const competitor of competitors) {
-    // Normalize company name: lowercase, trim, but KEEP special chars like & and punctuation
-    const normalizedName = competitor.name.toLowerCase().trim().replace(/\s+/g, ' ')
-    
-    // Extract domain if website exists (e.g., "stripe.com" from "https://www.stripe.com/products")
-    let rootDomain: string | null = null
-    let isActualCompanyWebsite = false
-    
-    if (competitor.website) {
-      try {
-        const url = new URL(competitor.website)
-        const hostname = url.hostname.replace(/^www\./, '').toLowerCase()
-        
-        // Extract root domain (e.g., "stripe" from "stripe.com")
-        const domainParts = hostname.split('.')
-        rootDomain = domainParts[0]
-        
-        // Check if this is likely the company's actual website (not a news article)
-        isActualCompanyWebsite = !isNewsSite(competitor.website)
-      } catch {
-        // Invalid URL, skip domain extraction
-      }
+    // Get normalized domain
+    const domain = competitor.website 
+      ? normalizeUrl(competitor.website)  // Just the domain now
+      : competitor.name.toLowerCase().replace(/\s+/g, '')
+
+    // Check if we've seen this domain
+    if (seenDomains.has(domain)) {
+      const existing = seenDomains.get(domain)!
+      console.log(`[STAGE1] Skipping duplicate: ${competitor.name} (${competitor.website}) - already have: ${existing.name} (${existing.website})`)
+      continue
     }
 
-    // Create deduplication key
-    // Strategy: Use the company name as the primary key
-    let dedupKey = normalizedName
-
-    // If this is NOT a news article, also check for domain-based matches
-    if (isActualCompanyWebsite && rootDomain) {
-      // Check if domain name closely matches company name
-      // Example: "stripe" domain matches "Stripe" or "Stripe Inc" company name
-      const companyNameCore = normalizedName
-        .replace(/\s+(inc|llc|ltd|corp|corporation|company|co|limited)\.?$/i, '') // Remove legal suffixes
-        .replace(/[^\w\s&]/g, '') // Remove punctuation but keep & and spaces
-        .replace(/\s+/g, '') // Remove spaces for comparison
-      
-      // If domain matches the core company name, use domain as key
-      // This catches: "Stripe Inc" from stripe.com and "Stripe" from techcrunch.com/stripe
-      if (companyNameCore.length >= 3 && rootDomain.length >= 3) {
-        // Only match if one is substring of other AND length difference is small
-        const lengthDiff = Math.abs(companyNameCore.length - rootDomain.length)
-        const minLength = Math.min(companyNameCore.length, rootDomain.length)
-        
-        // Require at least 4 character match and small length difference
-        if ((companyNameCore.includes(rootDomain) || rootDomain.includes(companyNameCore)) && 
-            lengthDiff <= 4 && minLength >= 4) {
-          dedupKey = rootDomain // Use domain as canonical key
-        }
-      }
-    }
-
-    // Check if we've seen this company before
-    if (seen.has(dedupKey)) {
-      const existing = seen.get(dedupKey)!
-      const existingIsNews = isNewsSite(existing.website)
-      
-      // Prioritize actual company websites over news articles
-      if (isActualCompanyWebsite && existingIsNews) {
-        // Current entry is actual company website, replace the news article
-        console.log(`[STAGE1] Replacing news article with company website: ${competitor.name} (${competitor.website})`)
-        seen.set(dedupKey, competitor)
-      } else {
-        // Keep existing entry, skip this one
-        console.log(`[STAGE1] Skipping duplicate: ${competitor.name} (${competitor.website}) - already have: ${existing.name}`)
-      }
-    } else {
-      // First time seeing this company
-      seen.set(dedupKey, competitor)
-    }
+    // First time seeing this domain
+    seenDomains.set(domain, competitor)
   }
 
-  const deduplicated = Array.from(seen.values())
+  const deduplicated = Array.from(seenDomains.values())
   console.log(`[STAGE1] Deduplicated ${competitors.length} → ${deduplicated.length} competitors`)
   
   return deduplicated

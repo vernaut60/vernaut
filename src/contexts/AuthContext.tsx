@@ -246,6 +246,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         console.log('[AuthContext] Auth state changed:', event)
         
+        // Handle SIGNED_OUT event (Supabase recommended pattern)
+        if (event === 'SIGNED_OUT') {
+          // Clear state immediately (Supabase pattern: let event handler manage state)
+          setSession(null)
+          setUser(null)
+          setIsSessionExpired(false)
+          setSessionError(null)
+          setLoading(false)
+          
+          // Redirect immediately using replace to prevent error flash on protected pages
+          // window.location.replace() performs immediate redirect without adding to history
+          window.location.replace('/?logout=true')
+          return
+        }
+        
         // onAuthStateChange provides validated sessions, but check expiry for safety
         if (session) {
           const isValid = validateSession(session)
@@ -294,31 +309,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSessionError(null)
       setIsSessionExpired(false)
       
+      // Call signOut - this triggers onAuthStateChange with SIGNED_OUT event
+      // Let the event handler manage state clearing and redirect (Supabase recommended pattern)
       const { error } = await supabase.auth.signOut()
       
       if (error) {
         console.error('Logout error:', error)
-        // Still clear local state even if server logout fails
+        // If signOut fails, still trigger state clearing manually as fallback
+        setSession(null)
+        setUser(null)
+        setIsSessionExpired(false)
+        setSessionError(null)
+        setLoading(false)
+        window.location.href = '/?logout=true'
       }
-      
-      setUser(null)
-      setSession(null)
-      setIsSessionExpired(false)
-      setSessionError(null)
-      
-      // Redirect to home with logout flag
-      window.location.href = '/?logout=true'
+      // If successful, onAuthStateChange will handle state clearing and redirect
     } catch (error) {
       console.error('Logout error:', error)
-      // Still clear local state even if logout fails
-      setUser(null)
+      // Fallback: clear state and redirect if signOut throws
       setSession(null)
+      setUser(null)
       setIsSessionExpired(false)
       setSessionError(null)
-      // Redirect to home with logout flag
-      window.location.href = '/?logout=true'
-    } finally {
       setLoading(false)
+      window.location.href = '/?logout=true'
     }
   }
 

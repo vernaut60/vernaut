@@ -25,7 +25,6 @@ interface HeroSectionProps {
 }
 
 export default function HeroSection({ 
-  ideaTitle, 
   score, 
   riskScore, 
   status, 
@@ -65,33 +64,15 @@ export default function HeroSection({
       transition={{ duration: 0.6, ease: "easeOut" }}
       className="mb-8"
     >
-      {/* Main Hero Card */}
-      <div className="relative rounded-2xl border border-white/10 ring-1 ring-white/5 bg-gradient-to-b from-[#0a0a0f] to-[#0d0d14] backdrop-blur-md shadow-inner p-6 sm:p-8">
-        {/* Inner radial glow */}
-        <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-70" 
-          style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.12), transparent 60%)' }} 
-          aria-hidden="true"></div>
-        
-        <div className="relative z-10">
-          {/* Idea Title */}
-          <motion.h1 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-6 leading-tight"
-          >
-            {ideaTitle}
-          </motion.h1>
-
-          {/* Score and Risk Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {/* Overall Score */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
-            >
+      {/* Score and Risk Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Overall Score */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
+        >
               <div className="flex items-center justify-center gap-2 mb-2">
                 <span className="text-sm text-neutral-400">Idea Quality Score</span>
                 <span className="text-xl">💡</span>
@@ -114,15 +95,15 @@ export default function HeroSection({
                   </div>
                 )}
               </div>
-            </motion.div>
+        </motion.div>
 
-            {/* Risk Score */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
-            >
+        {/* Risk Score */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
+        >
               <div className="flex items-center justify-center gap-2 mb-2">
                 <span className="text-sm text-neutral-400">Risk Level</span>
                 <span className="text-xl">⚠️</span>
@@ -151,15 +132,15 @@ export default function HeroSection({
                   </div>
                 )}
               </div>
-            </motion.div>
+        </motion.div>
 
-            {/* Status Badge */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.4 }}
-              className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
-            >
+        {/* Status Badge */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
+        >
               <div className="flex items-center justify-center gap-2 mb-2">
                 <span className="text-sm text-neutral-400">Status</span>
                 <span className="text-xl">✅</span>
@@ -170,15 +151,15 @@ export default function HeroSection({
               <div className="text-sm text-neutral-300">
                 Free Analysis Complete
               </div>
-            </motion.div>
+        </motion.div>
 
-            {/* Last Updated */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
-              className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
-            >
+        {/* Last Updated */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all text-center"
+        >
               <div className="flex items-center justify-center gap-2 mb-2">
                 <span className="text-sm text-neutral-400">Updated</span>
                 <span className="text-xl">📅</span>
@@ -189,19 +170,17 @@ export default function HeroSection({
               <div className="text-sm text-neutral-300">
                 Analysis Complete
               </div>
-            </motion.div>
-          </div>
+        </motion.div>
+      </div>
 
-
-
-          {/* Score Improvement Section */}
-          {comparison?.has_demo && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.6 }}
-              className="mt-6 bg-gradient-to-r from-green-600/10 to-blue-600/10 border border-green-500/30 rounded-xl p-4"
-            >
+      {/* Score Improvement Section */}
+      {comparison?.has_demo && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="mt-6 bg-gradient-to-r from-green-600/10 to-blue-600/10 border border-green-500/30 rounded-xl p-4"
+        >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-lg">📈</span>
                 <h3 className="text-lg font-semibold text-white">
@@ -225,17 +204,17 @@ export default function HeroSection({
                   </motion.div>
                 ))}
               </div>
-            </motion.div>
-          )}
+        </motion.div>
+      )}
 
-          {/* Score Factors Section (for no-demo users) */}
-          {!comparison?.has_demo && scoreFactors && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.6 }}
-              className="mt-6 bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/30 rounded-xl p-4"
-            >
+      {/* Score Factors Section (for no-demo users) */}
+      {!comparison?.has_demo && scoreFactors && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="mt-6 bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/30 rounded-xl p-4"
+        >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-lg">🎯</span>
                 <h3 className="text-lg font-semibold text-white">
@@ -311,8 +290,6 @@ export default function HeroSection({
             </motion.div>
           )}
 
-        </div>
-      </div>
     </motion.div>
   )
 }

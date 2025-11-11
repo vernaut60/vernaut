@@ -102,31 +102,87 @@ async function generateQuestionsWithAI(ideaText: string): Promise<Question[]> {
 
 IDEA: "${ideaText.trim()}"
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ CRITICAL: AVOID REDUNDANT QUESTIONS ⚠️
+
+Before generating questions, ANALYZE WHAT'S ALREADY IN THE IDEA TEXT:
+
+**Check if the idea already mentions:**
+- ✅ Geographic location/market (e.g., "in California", "US market", "India", "for Indiana families")
+- ✅ Target customer (e.g., "for small businesses", "targeting farmers", "B2B SaaS")
+- ✅ Solution/product type (e.g., "mobile app", "SaaS platform", "consulting service")
+- ✅ Business model (e.g., "subscription", "marketplace", "freemium")
+- ✅ Problem being solved (e.g., "farmers lack real-time weather data")
+- ✅ Unique value prop (e.g., "AI-powered", "10x cheaper", "first in market")
+
+**If information is ALREADY in the idea:**
+- ❌ DON'T ask about it again
+- ✅ Move on to what's MISSING
+
+**Example 1:**
+Idea: "Agrotourism farm in Indiana for families seeking farm experiences"
+Already stated: Geographic market (Indiana), target customer (families), solution type (agrotourism)
+DON'T ask: "Which geographic market?" ❌
+DO ask: "What existing solutions do families use?" ✅
+
+**Example 2:**
+Idea: "AI-powered expense management SaaS for small businesses"
+Already stated: Solution (SaaS), target (small businesses), differentiator (AI-powered)
+DON'T ask: "What type of solution?" ❌
+DO ask: "Which geographic market will you launch in first?" ✅
+
+**Example 3:**
+Idea: "Help people find better job opportunities"
+Not stated: Geographic market, target customer segment, solution type, business model
+DO ask: "Which geographic market?" ✅
+DO ask: "What specific customer segment?" ✅
+DO ask: "What type of solution?" ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANALYSIS STEP (think before generating):
+1. What information is ALREADY PROVIDED in the idea text?
+   - Write it down explicitly
+   - Example: "Already stated: Indiana (location), families (customer), agrotourism (solution)"
+   
+2. What information is MISSING and truly needed?
+   - Only these become questions
+   - Example: "Missing: existing alternatives, budget, technical capability, timeline"
+   
+3. What type of business is this? (B2B/B2C, SaaS/marketplace/product/service)
+
+4. What are the CRITICAL risk factors? (technical complexity, domain expertise, competition, etc.)
+
+5. What information is MOST important to assess viability?
+   - Focus questions here
+   - Skip nice-to-have details
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 CRITICAL RULES - NEVER MAKE ASSUMPTIONS:
 
 ❌ NEVER assume:
-1. Geographic market (don't say "in the US", "US market", etc.)
+1. Geographic market (don't say "in the US", "US market", etc.) IF NOT STATED IN IDEA
 2. Specific competitors by name (Weather Underground, Uber, Stripe, etc.)
 3. Specific regulations (FDA, GDPR, HIPAA, etc.)
 4. Technology availability (don't assume cloud, apps, internet)
-5. Business model (don't assume SaaS, subscription, etc.)
+5. Business model (don't assume SaaS, subscription, etc.) IF NOT STATED IN IDEA
 6. Currency or pricing levels (don't assume USD or specific ranges)
 7. Market maturity (don't assume developed vs emerging markets)
 8. Customer behavior (don't assume smartphone usage, credit cards, etc.)
 
-✅ INSTEAD - ASK USER TO PROVIDE CONTEXT:
-1. "Which geographic market are you targeting?"
-2. "What existing solutions do customers use in your market?"
-3. "What regulations apply in your target market?"
-4. "How do your target customers access technology?"
-5. "What budget do you have available?"
-6. "How do customers in your market prefer to pay?"
+✅ INSTEAD - ASK USER TO PROVIDE CONTEXT (only for what's MISSING):
+1. IF location not in idea → "Which geographic market are you targeting?"
+2. IF competitors not mentioned → "What existing solutions do customers use in your market?"
+3. IF regulations not mentioned → "What regulations apply in your target market?"
+4. IF tech not clear → "How do your target customers access technology?"
+5. IF budget not mentioned → "What budget do you have available?"
+6. IF business model not clear → "How do customers in your market prefer to pay?"
 
-ANALYSIS STEP (think before generating):
-1. What type of business is this? (B2B/B2C, SaaS/marketplace/product/service)
-2. What are the CRITICAL risk factors? (technical complexity, domain expertise, competition, etc.)
-3. What information is MOST important to assess viability?
-4. What context is MISSING from the idea that I need to ask about?
+**Remember: Only ask about what's NOT already in the idea!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Based on your analysis, generate ${questionCount} questions that will help assess:
 - Target market and geography (if not specified in idea)
