@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { SectionHeader } from '../common'
 
 interface Competitor {
   id: string
@@ -192,22 +193,15 @@ export default function Competitors({ competitors }: CompetitorsProps) {
       className="mb-8"
     >
       {/* Section Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
+      <SectionHeader
+        title="Competitive Landscape"
+        description="Key competitors and your unique positioning opportunities"
+        gradientFrom="from-purple-400"
+        gradientTo="to-pink-400"
+        titleClassName="text-2xl sm:text-3xl"
+        descriptionClassName="ml-4"
         className="mb-8"
-      >
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-1 h-8 bg-gradient-to-b from-purple-400 to-pink-400 rounded-full"></div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white">
-            Competitive Landscape
-          </h2>
-        </div>
-        <p className="text-neutral-400 text-sm sm:text-base ml-4">
-          Key competitors and your unique positioning opportunities
-        </p>
-      </motion.div>
+      />
 
       {/* Always-visible Summary Card */}
       <motion.div
@@ -420,26 +414,26 @@ function CompetitorCard({ competitor, index }: { competitor: Competitor; index: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.1 * index }}
-      className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all"
+      className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all overflow-hidden"
           >
             {/* Competitor Header */}
             <div className="mb-4">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-1">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-white mb-1 line-clamp-2 break-words">
                     {competitor.name}
                   </h3>
                   <a 
                     href={competitor.website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors break-all word-break break-words inline-block max-w-full"
                   >
                     {competitor.website.replace('https://', '').replace('http://', '')}
                   </a>
                 </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-1 mb-1">
+                <div className="flex-shrink-0 text-right ml-2">
+                  <div className="flex items-center gap-1 mb-1 whitespace-nowrap">
                     <span className="text-lg">{getPositionIcon(competitor.marketPosition)}</span>
                     <span className="text-xs font-medium text-neutral-300">
                       {getPositionLabel(competitor.marketPosition)}
@@ -455,7 +449,7 @@ function CompetitorCard({ competitor, index }: { competitor: Competitor; index: 
                     <span className="text-sm text-neutral-400">🎯</span>
                     <span className="text-sm font-medium text-white">Target Market</span>
                   </div>
-                  <p className="text-sm text-neutral-300 leading-relaxed">
+                  <p className="text-sm text-neutral-300 leading-relaxed break-words">
                     {competitor.positioning.target_market}
                   </p>
                 </div>
@@ -498,7 +492,7 @@ function CompetitorCard({ competitor, index }: { competitor: Competitor; index: 
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-neutral-300">
+                <p className="text-sm text-neutral-300 break-words">
                   {competitor.positioning?.price_details || competitor.pricing}
                 </p>
               </div>
@@ -510,7 +504,7 @@ function CompetitorCard({ competitor, index }: { competitor: Competitor; index: 
                     <span className="text-yellow-400">⭐</span>
                     Key Strengths
                   </h4>
-                  <p className="text-sm text-neutral-300 leading-relaxed">
+                  <p className="text-sm text-neutral-300 leading-relaxed break-words">
                     {competitor.positioning.key_strengths}
                   </p>
                 </div>
@@ -533,7 +527,7 @@ function CompetitorCard({ competitor, index }: { competitor: Competitor; index: 
                     className="flex items-start gap-2"
                   >
                     <div className="w-1.5 h-1.5 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
-                    <span className="text-sm text-neutral-300">{feature}</span>
+                    <span className="text-sm text-neutral-300 break-words">{feature}</span>
                   </motion.div>
                 ))}
               </div>
@@ -545,7 +539,7 @@ function CompetitorCard({ competitor, index }: { competitor: Competitor; index: 
                 <span className="text-green-400">🎯</span>
                 Your Advantage
               </h4>
-              <p className="text-sm text-neutral-300 leading-relaxed">
+              <p className="text-sm text-neutral-300 leading-relaxed break-words">
                 {competitor.yourAdvantage}
               </p>
             </div>

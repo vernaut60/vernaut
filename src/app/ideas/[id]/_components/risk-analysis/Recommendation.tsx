@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { motion } from 'framer-motion'
+import { SectionHeader } from '../common'
 
 interface RecommendationProps {
   decision: 'PROCEED' | 'NEEDS_WORK'  // 'PIVOT' removed - replaced with 'NEEDS_WORK'
@@ -90,23 +91,18 @@ export default function Recommendation({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
-      className="mt-8 mb-8 bg-gray-50/10 border border-gray-200/20 rounded-xl p-6"
+      className="mt-8 mb-8"
     >
       {/* Section Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
+      <SectionHeader
+        icon="🎯"
+        title="Final Recommendation"
+        description="AI-powered decision based on comprehensive analysis"
+        gradientFrom="from-green-400"
+        gradientTo="to-blue-400"
+        titleClassName="text-2xl sm:text-3xl"
         className="mb-6"
-      >
-        <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
-          <span className="text-3xl">🎯</span>
-          Final Recommendation
-        </h2>
-        <p className="text-neutral-400 text-sm sm:text-base">
-          AI-powered decision based on comprehensive analysis
-        </p>
-      </motion.div>
+      />
 
       {/* Main Decision Card */}
       <motion.div

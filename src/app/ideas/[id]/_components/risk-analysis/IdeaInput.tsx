@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { SectionHeader } from '../common'
 
 interface IdeaInputProps {
   problem: string
@@ -19,25 +20,19 @@ export default function IdeaInput({ problem, audience, solution, monetization, h
       className="mb-8"
     >
       {/* Section Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="mb-6"
-      >
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-1 h-8 bg-gradient-to-b from-green-400 to-blue-400 rounded-full"></div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white">
-            {hasDemoData ? "Your Original Input" : "Your Startup Idea"}
-          </h2>
-        </div>
-        <p className="text-neutral-400 text-sm sm:text-base ml-4">
-          {hasDemoData 
+      <SectionHeader
+        title={hasDemoData ? "Your Original Input" : "Your Startup Idea"}
+        description={
+          hasDemoData 
             ? "Here's what you shared in the demo. We've used this to personalize every part of your analysis:"
             : "Here's the idea you're validating. This forms the foundation for your entire personalized analysis:"
-          }
-        </p>
-      </motion.div>
+        }
+        gradientFrom="from-green-400"
+        gradientTo="to-blue-400"
+        titleClassName="text-2xl sm:text-3xl"
+        descriptionClassName="ml-4"
+        className="mb-6"
+      />
 
       {/* Personalization confirmation message - show after full analysis (when hasDemoData is false) */}
       {!hasDemoData && (

@@ -1,6 +1,7 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import React, { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface Stage {
   id: number
@@ -20,9 +21,9 @@ interface LockedStagesProps {
 // Helper functions for enhanced stage content
 const getStageDescription = (stageId: number): string => {
   const descriptions: { [key: number]: string } = {
-    2: "Get personalized revenue models, pricing strategy, and financial forecasts for your wine grape AI platform.",
-    3: "Get a personalized customer acquisition plan for reaching organic wine growers in California.",
-    4: "Get a prioritized feature roadmap and MVP definition for your satellite imagery + disease prediction platform.",
+    2: "Get a prioritized feature roadmap and MVP definition for your satellite imagery + disease prediction platform.",
+    3: "Get personalized revenue models, pricing strategy, and financial forecasts for your wine grape AI platform.",
+    4: "Get a personalized customer acquisition plan for reaching organic wine growers in California.",
     5: "Get a comprehensive team building and equity distribution plan for your wine grape technology startup.",
     6: "Get an investor-ready pitch deck and funding strategy customized to your market and stage.",
     7: "Get a detailed 90-day launch plan with growth metrics and execution timeline for your AI platform."
@@ -32,9 +33,9 @@ const getStageDescription = (stageId: number): string => {
 
 const getStageOutcome = (stageId: number): string => {
   const outcomes: { [key: number]: string } = {
-    2: "Know exactly how much runway you need, when you'll break even, and if your pricing is optimal.",
-    3: "Know exactly where to find your first 100 customers and how to reach them efficiently.",
-    4: "Build the right features first and avoid 6+ months of wasted development time.",
+    2: "Build the right features first and avoid 6+ months of wasted development time.",
+    3: "Know exactly how much runway you need, when you'll break even, and if your pricing is optimal.",
+    4: "Know exactly where to find your first 100 customers and how to reach them efficiently.",
     5: "Avoid founder conflicts and build a team that can scale with your vision.",
     6: "Get meetings with the right investors and secure funding for your growth stage.",
     7: "Execute your launch with confidence and hit your first revenue milestones."
@@ -44,9 +45,9 @@ const getStageOutcome = (stageId: number): string => {
 
 const getStageBadge = (stageId: number): string => {
   const badges: { [key: number]: string } = {
-    2: "💰 High Value",
-    3: "🎯 Most Popular", 
-    4: "⚡ Quick Win",
+    2: "⚡ Quick Win",
+    3: "💰 High Value",
+    4: "🎯 Most Popular", 
     5: "👥 Essential",
     6: "💎 Premium",
     7: "🚀 Action-Ready"
@@ -57,25 +58,25 @@ const getStageBadge = (stageId: number): string => {
 const getStageFeatures = (stageId: number): string[] => {
   const features: { [key: number]: string[] } = {
     2: [
+      "MVP feature prioritization matrix",
+      "12-month development timeline",
+      "Technical stack recommendations",
+      "Integration requirements (weather APIs)",
+      "Mobile vs web platform priorities"
+    ],
+    3: [
       "3-year revenue projections for YOUR market",
       "Pricing strategy analysis vs competitors",
       "Break-even timeline based on YOUR $50K budget",
       "CAC/LTV calculations for YOUR customer segment",
       "5 growth scenarios (pessimistic to aggressive)"
     ],
-    3: [
+    4: [
       "15+ acquisition channels ranked by effectiveness",
       "Launch timeline (Months 1-6) with milestones",
       "Marketing budget allocation strategy",
       "Partnership opportunities (wine associations)",
       "First 10 customers acquisition roadmap"
-    ],
-    4: [
-      "MVP feature prioritization matrix",
-      "12-month development timeline",
-      "Technical stack recommendations",
-      "Integration requirements (weather APIs)",
-      "Mobile vs web platform priorities"
     ],
     5: [
       "Key hire timeline (CTO, Sales, Marketing)",
@@ -105,22 +106,22 @@ const getStageFeatures = (stageId: number): string[] => {
 const getPersonalizationCallouts = (stageId: number): string[] => {
   const callouts: { [key: number]: string[] } = {
     2: [
+      "Reflects YOUR solution (AI disease prediction + irrigation) → Features match your unique value prop",
+      "Considers YOUR skills (strong tech background) → Faster development timeline assumptions",
+      "Targets YOUR users (wine farmers) → Mobile-first design for vineyard use cases",
+      "Aligns with YOUR validation approach → Build for feedback, not perfection"
+    ],
+    3: [
       "Uses YOUR pricing ($99-199/vineyard) → Revenue projections match your actual business model",
       "Targets YOUR market (California) → Competition analysis reflects regional dynamics",
       "Considers YOUR budget ($50K) → Break-even timeline is realistic for your constraints",
       "Reflects YOUR stage (pre-launch) → Milestones aligned with validation phase"
     ],
-    3: [
+    4: [
       "Targets YOUR customer (organic wine growers, 10-200 acres) → Channel recommendations match farm size",
       "Uses YOUR location (California) → Leverages local networks, events, and associations",
       "Considers YOUR budget ($50K) → Affordable channel mix with proven ROI",
       "Reflects YOUR advantage (wine-specific) → Positioning vs generic farm tools"
-    ],
-    4: [
-      "Reflects YOUR solution (AI disease prediction + irrigation) → Features match your unique value prop",
-      "Considers YOUR skills (strong tech background) → Faster development timeline assumptions",
-      "Targets YOUR users (wine farmers) → Mobile-first design for vineyard use cases",
-      "Aligns with YOUR validation approach → Build for feedback, not perfection"
     ],
     5: [
       "Scaling plan for wine tech startup → Team structure matches industry needs",
@@ -146,9 +147,9 @@ const getPersonalizationCallouts = (stageId: number): string[] => {
 
 const getStageValue = (stageId: number): string => {
   const values: { [key: number]: string } = {
-    2: "2,500 (fractional CFO rates for financial modeling)",
-    3: "3,000 (marketing consultant for GTM strategy)", 
-    4: "2,000 (product manager for roadmap planning)",
+    2: "2,000 (product manager for roadmap planning)",
+    3: "2,500 (fractional CFO rates for financial modeling)",
+    4: "3,000 (marketing consultant for GTM strategy)", 
     5: "1,500 (HR consultant for team planning)",
     6: "4,000 (fundraising consultant + pitch deck design)",
     7: "1,000 (project manager for execution planning)"
@@ -158,9 +159,9 @@ const getStageValue = (stageId: number): string => {
 
 const getRiskMitigation = (stageId: number): string => {
   const mitigations: { [key: number]: string } = {
-    2: "This stage helps mitigate 'Business Viability' risk (currently 6.5/10) by validating your financial model and pricing strategy.",
-    3: "This stage helps mitigate 'Competition' risk (currently 7.5/10) by finding underserved channels and positioning against established players.",
-    4: "This stage helps mitigate 'Execution' risk (currently 6.0/10) by prioritizing the right features and avoiding development waste.",
+    2: "This stage helps mitigate 'Execution' risk (currently 6.0/10) by prioritizing the right features and avoiding development waste.",
+    3: "This stage helps mitigate 'Business Viability' risk (currently 6.5/10) by validating your financial model and pricing strategy.",
+    4: "This stage helps mitigate 'Competition' risk (currently 7.5/10) by finding underserved channels and positioning against established players.",
     5: "This stage helps mitigate 'Execution' risk by building the right team structure and avoiding founder conflicts.",
     6: "This stage helps mitigate 'Business Viability' risk by securing funding and proving market validation to investors.",
     7: "This stage helps mitigate 'Execution' risk by providing a clear launch plan and avoiding common startup mistakes."
@@ -169,7 +170,120 @@ const getRiskMitigation = (stageId: number): string => {
 }
 
 
+// Reusable CTA Button Component with variant support
+const CTAButton = ({ 
+  className = "", 
+  variant = "default" 
+}: { 
+  className?: string
+  variant?: "top" | "bottom" | "default"
+}) => {
+  const getButtonText = () => {
+    switch (variant) {
+      case "top":
+        return "🚀 Finish My Startup Journey – $39"
+      case "bottom":
+        return "🔓 Unlock Full System Access – $39"
+      default:
+        return "🔓 Unlock Complete System – $39"
+    }
+  }
+
+  return (
+    <motion.button
+      initial={{ scale: 0.95 }}
+      animate={{ scale: 1 }}
+      transition={{ duration: 0.5 }}
+      whileHover={{ scale: 1.05, y: -2 }}
+      whileTap={{ scale: 0.95 }}
+      className={`px-6 py-3 sm:px-8 sm:py-3 bg-[#4361EE] hover:bg-[#3649CC] text-white font-semibold rounded-xl shadow-lg transition-all ${className}`}
+    >
+      {getButtonText()}
+    </motion.button>
+  )
+}
+
 export default function LockedStages({ stages }: LockedStagesProps) {
+  // Hidden by default on page load
+  const [showMobileSticky, setShowMobileSticky] = useState(false)
+  const [isStage1ScrolledPast, setIsStage1ScrolledPast] = useState(false)
+  const [isFinalCTAInView, setIsFinalCTAInView] = useState(false)
+  const stage1Ref = useRef<HTMLDivElement>(null)
+  const finalCTARef = useRef<HTMLDivElement>(null)
+  const mobileStickyRef = useRef<HTMLDivElement>(null)
+
+  // Track when user scrolls past "Stage 1 Complete" section (≈ halfway down)
+  useEffect(() => {
+    if (!stage1Ref.current) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          // Only mark as scrolled past when:
+          // 1. Element is not intersecting (out of viewport)
+          // 2. AND element's top is above viewport (boundingClientRect.top < 0)
+          // This ensures we've scrolled DOWN past it, not that it's just below the viewport
+          const isScrolledPast = !entry.isIntersecting && entry.boundingClientRect.top < 0
+          setIsStage1ScrolledPast(isScrolledPast)
+        })
+      },
+      { threshold: 0, rootMargin: '0px' }
+    )
+
+    observer.observe(stage1Ref.current)
+
+    // Initial check: if Stage 1 is already in viewport on load, ensure it's not marked as scrolled past
+    const checkInitialState = () => {
+      if (stage1Ref.current) {
+        const rect = stage1Ref.current.getBoundingClientRect()
+        const isInViewport = rect.top >= 0 && rect.top < window.innerHeight
+        if (isInViewport) {
+          setIsStage1ScrolledPast(false)
+        }
+      }
+    }
+    
+    // Check after a short delay to ensure DOM is ready
+    const timeoutId = setTimeout(checkInitialState, 100)
+
+    return () => {
+      observer.disconnect()
+      clearTimeout(timeoutId)
+    }
+  }, [])
+
+  // Track when bottom CTA enters viewport
+  useEffect(() => {
+    if (!finalCTARef.current) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          // When final CTA enters viewport, mark it as in view
+          setIsFinalCTAInView(entry.isIntersecting)
+        })
+      },
+      { threshold: 0.1 } // Trigger when 10% of final CTA is visible
+    )
+
+    observer.observe(finalCTARef.current)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  // Conditional visibility: Show sticky bar only when contextually helpful
+  // - After Stage 1 is scrolled past
+  // - AND before bottom CTA enters viewport
+  useEffect(() => {
+    // Show sticky bar only when:
+    // 1. User has scrolled past Stage 1 (≈ halfway down)
+    // 2. Bottom CTA is NOT in viewport (main button isn't visible)
+    const shouldShow = isStage1ScrolledPast && !isFinalCTAInView
+    setShowMobileSticky(shouldShow)
+  }, [isStage1ScrolledPast, isFinalCTAInView])
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -179,6 +293,7 @@ export default function LockedStages({ stages }: LockedStagesProps) {
     >
       {/* Progress Journey Header */}
       <motion.div
+        ref={stage1Ref}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
@@ -189,7 +304,7 @@ export default function LockedStages({ stages }: LockedStagesProps) {
           Your Startup Journey Progress
         </h2>
         <p className="text-neutral-400 text-sm sm:text-base">
-          You&apos;ve completed Stage 1! Here&apos;s your roadmap to a funded startup:
+          You&apos;ve completed Stage 1! Continue your journey:
         </p>
         
         {/* Progress Percentage */}
@@ -217,12 +332,27 @@ export default function LockedStages({ stages }: LockedStagesProps) {
         </motion.div>
       </motion.div>
 
+      {/* Inline CTA - Appears immediately after Stage 1 with subtle fade-in */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.8, ease: "easeOut" }}
+        className="mb-8"
+      >
+        <div className="bg-gradient-to-r from-[#4361EE]/10 to-[#6B73FF]/10 border border-[#4361EE]/30 rounded-xl p-6 text-center">
+          <p className="text-white font-medium mb-4">
+            🎉 Ready to unlock your complete roadmap?
+          </p>
+          <CTAButton variant="top" />
+        </div>
+      </motion.div>
+
       {/* Collapsed Gradient Roadmap */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.4 }}
-        className="mt-8 bg-white/5 border border-white/10 rounded-2xl p-6 shadow-sm"
+        className="mt-8"
       >
         {/* Roadmap Header */}
         <div className="text-center mb-6">
@@ -336,8 +466,14 @@ export default function LockedStages({ stages }: LockedStagesProps) {
         </motion.div>
       </motion.div>
 
+      {/* Spacer for mobile sticky bar to prevent overlap with final CTA */}
+      {showMobileSticky && (
+        <div className="h-[72px] sm:hidden" aria-hidden="true" />
+      )}
+
       {/* Enhanced Final CTA */}
       <motion.div
+        ref={finalCTARef}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 1.0 }}
@@ -356,11 +492,11 @@ export default function LockedStages({ stages }: LockedStagesProps) {
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
               {[
+                "✓ Solution & Launch Priorities",
                 "✓ Financial Projections",
                 "✓ Go-to-Market Strategy", 
-                "✓ Product Roadmap",
-                "✓ Team & Hiring Plan",
-                "✓ Funding Strategy",
+                "✓ Team & Resources",
+                "✓ Capital Requirements",
                 "✓ Execution Plan"
               ].map((item, index) => (
                 <div key={index} className="flex items-center gap-2 text-sm text-neutral-300">
@@ -395,21 +531,43 @@ export default function LockedStages({ stages }: LockedStagesProps) {
           </div>
         </div>
 
-        {/* CTA Button */}
+        {/* CTA Button - Bottom CTA */}
         <div className="text-center">
-          <motion.button
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.5, delay: 1.2 }}
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-8 py-3 bg-[#4361EE] hover:bg-[#3649CC] text-white font-semibold rounded-xl shadow-lg transition-all"
-          >
-            🔓 Unlock Complete System – $79
-          </motion.button>
-          
+          <CTAButton variant="bottom" />
         </div>
       </motion.div>
+
+      {/* Mobile Sticky Bottom Bar - Appears after scrolling past Stage 1, hides near footer */}
+      <AnimatePresence>
+        {showMobileSticky && (
+          <motion.div
+            ref={mobileStickyRef}
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="fixed bottom-0 left-0 right-0 z-40 sm:hidden bg-gradient-to-r from-[#4361EE] to-[#6B73FF] border-t border-[#4361EE]/50 shadow-2xl p-4 safe-area-inset-bottom"
+          >
+            <div className="max-w-md mx-auto flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm truncate">
+                  Finish My Startup Journey
+                </p>
+                <p className="text-white/80 text-xs">
+                  $39 • Lifetime access
+                </p>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-5 py-2.5 bg-white text-[#4361EE] font-semibold rounded-lg shadow-lg transition-all whitespace-nowrap"
+              >
+                Get Started
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
